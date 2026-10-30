@@ -1,0 +1,40 @@
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+html,body{margin:0;height:100%;overflow:hidden;background:#3b2a20;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;overscroll-behavior:none;touch-action:none}
+#cv{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+#hud{position:fixed;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top) + 8px) 10px 0;display:flex;gap:6px;align-items:center;pointer-events:none}
+.pill{pointer-events:auto;background:rgba(255,255,255,.92);border-radius:16px;padding:5px 10px;font-weight:800;font-size:15px;color:#4a2f1c;box-shadow:0 2px 0 rgba(0,0,0,.18);display:flex;align-items:center;gap:4px;position:relative;white-space:nowrap}
+.pill .ic{font-size:15px}
+#pLvl{padding-bottom:8px}
+.bar{position:absolute;left:8px;right:8px;bottom:3px;height:3px;background:#e5d6c3;border-radius:2px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:#f2a530}
+.round{pointer-events:auto;margin-left:auto;width:38px;height:38px;border-radius:50%;border:0;background:rgba(255,255,255,.92);font-size:18px;font-weight:800;color:#4a2f1c;box-shadow:0 2px 0 rgba(0,0,0,.18)}
+#weather{position:fixed;top:calc(env(safe-area-inset-top) + 52px);left:50%;transform:translateX(-50%);pointer-events:none}
+#weather div{background:#3d5a80;color:#fff;font-weight:700;font-size:13px;padding:5px 12px;border-radius:12px}
+#toasts{position:fixed;left:0;right:0;top:calc(env(safe-area-inset-top) + 84px);display:flex;flex-direction:column;align-items:center;gap:5px;pointer-events:none}
+.toast{background:rgba(40,28,20,.88);color:#fff;font-size:14px;font-weight:600;padding:7px 13px;border-radius:12px;max-width:88vw;text-align:center;animation:tin .25s ease-out}
+.toast.warn{background:#c0392b}.toast.good{background:#2e8b57}
+@keyframes tin{from{opacity:0;transform:translateY(-8px)}to{opacity:1}}
+#bottom{position:fixed;left:0;right:0;bottom:0;padding:6px 8px calc(env(safe-area-inset-bottom) + 8px);background:linear-gradient(to top,rgba(40,26,18,.92),rgba(40,26,18,.75));}
+#status{color:#f5e6cf;font-size:12.5px;font-weight:600;text-align:center;margin-bottom:5px;min-height:15px}
+.row{display:flex;gap:6px}
+.row button{flex:1;border:0;border-radius:12px;background:#f6ead6;color:#4a2f1c;padding:6px 2px;font-size:13px;font-weight:700;display:flex;flex-direction:column;align-items:center;gap:1px;box-shadow:0 3px 0 #b89a74;min-height:50px;justify-content:center}
+.row button b{font-size:12.5px}
+.row button small{font-size:11px;font-weight:600;opacity:.8}
+.row button:active{transform:translateY(2px);box-shadow:0 1px 0 #b89a74}
+.row button.sel{background:#ffcf5c;box-shadow:0 3px 0 #c98f12}
+.row button.locked{opacity:.5}
+.row button.big{font-size:20px;flex:0 0 62px}
+.row button.dig{background:#ff9f43;color:#fff;box-shadow:0 3px 0 #c06a18}
+.row button.ok{background:#3cb371;color:#fff;box-shadow:0 3px 0 #23784a}
+.hidden{display:none!important}
+#sheet{position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:flex-end;justify-content:center;z-index:5}
+.card{background:#fff8ec;width:100%;max-width:480px;border-radius:20px 20px 0 0;padding:18px 16px calc(env(safe-area-inset-bottom) + 16px);color:#4a2f1c}
+.card h3{margin:0 0 6px;font-size:19px}
+.card p{margin:0 0 12px;font-size:15px;line-height:1.4}
+.card .opts{display:flex;flex-direction:column;gap:8px}
+.card button{border:0;border-radius:14px;padding:12px;font-size:16px;font-weight:700;background:#f1dfc2;color:#4a2f1c;text-align:left;box-shadow:0 3px 0 #c9a97e}
+.card button small{display:block;font-weight:500;font-size:13px;opacity:.8;margin-top:2px}
+.card button.pri{background:#ff9f43;color:#fff;box-shadow:0 3px 0 #c06a18;text-align:center}
+.card button.danger{background:#e74c3c;color:#fff;box-shadow:0 3px 0 #a33224;text-align:center}
+.card button.plain{background:transparent;box-shadow:none;text-align:center;opacity:.7}
+.card .dots{text-align:center;margin-bottom:10px;color:#c9a97e;letter-spacing:4px}

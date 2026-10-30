@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="lt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Skruzdėlynas">
+<meta name="theme-color" content="#7ec8ee">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<title>Skruzdėlynas</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="hud">
+  <div class="pill" id="pFood"><span class="ic">🍖</span><span id="vFood">0</span></div>
+  <div class="pill" id="pAnts"><span class="ic">🐜</span><span id="vAnts">0</span></div>
+  <div class="pill" id="pLvl"><span class="ic">⭐</span><span id="vLvl">1</span><div class="bar"><i id="lvlBar"></i></div></div>
+  <button id="btnMenu" class="round">☰</button>
+</div>
+<div id="weather"></div>
+<div id="toasts"></div>
+<div id="bottom">
+  <div id="status"></div>
+  <div id="prodBar" class="row">
+    <button id="btnDig" class="big dig">⛏<small>Kasti</small></button>
+    <button class="prod" data-t="w"><b>Darbininkė</b><small>5 🍖</small></button>
+    <button class="prod" data-t="s"><b>Kareivė</b><small>10 🍖</small></button>
+    <button class="prod" data-t="c"><b>Žvalgė</b><small>8 🍖</small></button>
+    <button class="prod" data-t="p"><b>⏸</b><small>Pauzė</small></button>
+  </div>
+  <div id="digBar" class="row hidden">
+    <button class="brush" data-b="1"><b>Tunelis</b><small>siauras</small></button>
+    <button class="brush" data-b="3"><b>Urvas</b><small>platus</small></button>
+    <button id="btnClear"><b>🗑</b><small>Išvalyti</small></button>
+    <button id="btnDone" class="big ok">✓<small>Baigti</small></button>
+  </div>
+</div>
+<div id="sheet" class="hidden"><div class="card" id="sheetCard"></div></div>
+<script src="game.js"></script>
+</body>
+</html>
