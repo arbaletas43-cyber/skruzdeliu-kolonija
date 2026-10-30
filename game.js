@@ -52,7 +52,7 @@ function addAnt(t,x,y){const a={id:S.nextId++,t,x,y,hp:ANT[t].hp,path:[],st:'idl
 
 function afterLoad(){
   queued.fill(0);digProg.fill(0);if(S.queue)S.queue.forEach(i=>queued[i]=1);
-  rebuildRooms(); rebuildDugList(); buildSoil(); digTaken.clear();
+  rebuildDugList(); migrate(); rebuildRooms(); buildSoil(); rv=[]; digTaken.clear();
   const q=rooms.find(r=>r.type===1); if(q){queen.x=q.cx;queen.y=q.cy+2;}
   items.forEach(it=>{it.ass=[];it.arr=[];});
   ants.forEach(a=>{a.path=[];a.st='idle';a.job=null;a.wait=rnd(0,1);const c=cellAt(a.x,a.y); if(!dug[c]){const h=randomHomeCell(); a.x=cxi(h);a.y=cyi(h);}
@@ -70,7 +70,7 @@ function rebuildRooms(){
     let best=cells[0],bd=1e9;cells.forEach(c=>{const d=(cxi(c)-r.cx)**2+(cyi(c)-r.cy)**2;if(d<bd){bd=d;best=c;}});
     r.cx=cxi(best);r.cy=cyi(best);rooms.push(r);}
   let nS=0,nN=0,nR=0;for(let i=W;i<W*ROWS;i++){if(room[i]===2)nS++;else if(room[i]===3)nN++;else if(room[i]===4)nR++;}
-  caps.food=60+nS*5; caps.nurs=2+Math.floor(nN/4); caps.pop=6+Math.floor(nR/2);
+  caps.food=60+nS*5+30*upL('sto'); caps.nurs=2+Math.floor(nN/4); caps.pop=6+Math.floor(nR/2);
 }
 function nb4(i){const x=gxOf(i),r=[];if(x>0)r.push(i-1);if(x<W-1)r.push(i+1);if(i>=W)r.push(i-W);if(i<W*(ROWS-1))r.push(i+W);return r;}
 function cxi(i){return gxOf(i)*C+C/2}
@@ -158,7 +158,7 @@ function spawnFood(nearOnly){
   let near=nearOnly||Math.random()<0.6;if(near&&vis>=maxI)near=false;if(!near&&hid>=6)near=true;if(near&&vis>=maxI)return;
   let x;if(near){const rv=[];for(let i=2;i<W-2;i++)if(revealed[i])rv.push(i);x=rv[(Math.random()*rv.length)|0];}
   else x=2+((Math.random()*(W-4))|0);
-  if(items.some(it=>Math.abs(it.x-x)<2)||Math.abs(x-40)<2)return;
+  if(items.some(it=>Math.abs(it.x-x)<2)||Math.abs(x-40)<2||(S.rival&&S.rival.st===1&&Math.abs(x-RGX)<4))return;
   const r=Math.random();let t=r<0.4?'crumb':r<0.7?'seed':r<0.9?'berry':'beetle';if(t==='beetle'&&S.level<2)t='berry';
   items.push({id:S.nextId++,x,t,amt:FOODT[t].amt,need:FOODT[t].need,mk:false,age:0,ass:[],arr:[]});
 }
@@ -168,7 +168,7 @@ function toast(msg,cls,key){if(key){if(S.hints[key])return;S.hints[key]=1;}
   const el=document.createElement('div');el.className='toast '+(cls||'');el.textContent=msg;const box=document.getElementById('toasts');
   box.appendChild(el);while(box.children.length>3)box.firstChild.remove();setTimeout(()=>el.remove(),3200);}
 let lastToast={};function toastT(key,msg,cls,sec){const n=performance.now();if(lastToast[key]&&n-lastToast[key]<(sec||8)*1000)return;lastToast[key]=n;toast(msg,cls);}
-function surfDanger(){return S.weather.phase==='rain'||enemies.length>0||!!bird;}
+function surfDanger(){return S.weather.phase==='rain'||enemies.length>0||!!bird||rivalRaid();}
 function onSurface(a){return a.y<GY;}
 function abortJob(a){
   if(a.job&&a.job.k==='food'){const it=items.find(i=>i.id===a.job.id);if(it){it.ass=it.ass.filter(x=>x!==a.id);it.arr=it.arr.filter(x=>x!==a.id);}}
@@ -185,8 +185,9 @@ function assign(a){
   if(a.t==='w'){
     // food fetch
     if(!danger&&S.food<caps.food-2){
-      let best=null,bd=1e9;for(const it of items){if(!it.mk||!revealed[it.x]||it.ass.length>=it.need)continue;
-        const d=Math.abs(it.x-gxOf(here))+rowOf(here)*1.5;if(d<bd){bd=d;best=it;}}
+      let best=null,bd=1e9;for(const it of items){if(!revealed[it.x]||it.rv||it.ass.length>=it.need)continue;
+        if(!it.mk&&it.need>1&&wkFree()<it.need)continue;
+        const d=Math.abs(it.x-gxOf(here))+rowOf(here)*1.5-(it.mk?1000:0);if(d<bd){bd=d;best=it;}}
       if(best){const tgt=idx(best.x,0);const p=bfs(here,c=>c===tgt,false);
         if(p){best.ass.push(a.id);a.job={k:'food',id:best.id};a.path=p;a.st='toFood';return;}}
     }
@@ -196,8 +197,8 @@ function assign(a){
     if(p&&pick>=0){digTaken.add(pick);a.job={k:'dig',c:pick};a.path=p;a.st='toDig';return;}
   }
   if(a.t==='s'){
-    const e=enemies[0]||(bird&&ants.find(b=>b.id===bird.tid));
-    if(e&&S.weather.phase!=='rain'){const tgt=cellAt(e.x,GY-6);const p=bfs(here,c=>c===tgt,false);if(p){a.path=p;a.st='fight';a.wait=1;return;}}
+    let e=enemies[0]||(bird&&ants.find(b=>b.id===bird.tid));if(!e){const rx=rivalTarget(a);if(rx!==null)e={x:rx};}
+    if(e&&S.weather.phase!=='rain'){const tgt=cellAt(Math.max(C,Math.min(WW-C,e.x)),GY-6);const p=bfs(here,c=>c===tgt,false);if(p){a.path=p;a.st='fight';a.wait=1;return;}}
   }
   if(a.t==='c'&&!danger&&S.weather.phase!=='clouds'){
     const gx=gxOf(here);let tx=-1;
@@ -210,12 +211,13 @@ function assign(a){
   if(tgt<0)tgt=randomHomeCell();
   const p=bfs(here,c=>c===tgt,true);a.path=p||[];a.st='idle';a.wait=rnd(1.5,4);
 }
+function wkFree(){let n=0;for(const b of ants)if(b.t==='w'&&!b.job)n++;return n;}
 function layerOk(i){return LAYERS[layerOf(rowOf(i)-1)].lvl<=S.level;}
 
 function updAnt(a,dt){
   if(a.path.length){
     const t=a.path[0];const sur=t<W;const tx=cxi(t)+(sur?0:a.ox),ty=cyi(t)+(sur?0:a.oy);
-    const dx=tx-a.x,dy=ty-a.y,d=Math.hypot(dx,dy);let sp=ANT[a.t].spd*C*dt;if(a.carry&&a.job&&a.job.big)sp*=0.6;
+    const dx=tx-a.x,dy=ty-a.y,d=Math.hypot(dx,dy);let sp=ANT[a.t].spd*C*dt*spdM();if(a.carry&&a.job&&a.job.big)sp*=0.6;
     if(d<=sp){a.x=tx;a.y=ty;a.path.shift();}else{a.x+=dx/d*sp;a.y+=dy/d*sp;}
     if(d>0.1){const ta=Math.atan2(dy,dx);let da=ta-a.ang;while(da>Math.PI)da-=6.283;while(da<-Math.PI)da+=6.283;a.ang+=da*Math.min(1,dt*12);}
     a.phase+=sp*0.7;
@@ -234,12 +236,12 @@ function updAnt(a,dt){
           const p=bfs(cellAt(b.x,b.y),c=>room[c]===2,false)||bfs(cellAt(b.x,b.y),c=>room[c]===1,false);b.path=p||[];b.st='carry';});
         items.splice(items.indexOf(it),1);}
       break;}
-    case 'carry':{const add=Math.min(a.carry,caps.food-S.food);S.food+=Math.max(0,add);
+    case 'carry':{const add=Math.min(a.carry,caps.food-S.food);S.food+=Math.max(0,add);S.stats.food+=Math.max(0,add);
       if(add<a.carry-0.01)toastT('full','Sandėlis pilnas! Iškask ir paskirk daugiau sandėlių.','warn',15);
       a.carry=0;a.ct=null;a.job=null;a.st='idle';a.wait=0.3;break;}
     case 'toDig':a.st='digging';break;
     case 'digging':{const c=a.job.c;if(!queued[c]){abortJob(a);a.st='idle';break;}
-      const L=layerOf(rowOf(c)-1);digProg[c]+=dt*digMult()/LAYERS[L].hard;a.phase+=dt*8;
+      const L=layerOf(rowOf(c)-1);digProg[c]+=dt*digMult()*(1+0.2*upL('dig'))/LAYERS[L].hard;a.phase+=dt*8;
       const dx=cxi(c)-a.x,dy=cyi(c)-a.y;a.ang=Math.atan2(dy,dx);
       if(Math.random()<dt*6)parts.push({x:a.x+dx*0.6,y:a.y+dy*0.6,vx:rnd(-20,20),vy:rnd(-30,0),l:0.5,c:LAYERS[L].peb});
       if(digProg[c]>=1){completeDig(c);abortJob(a);a.st='idle';a.wait=0;}
@@ -256,6 +258,7 @@ function completeDig(c){
   const gx=gxOf(c),gy=rowOf(c)-1;const t=treasureAt(gx,gy);
   if(t){const add=Math.min(t,caps.food-S.food);S.food+=Math.max(0,add);
     toast((gy>=80?'💎 Gelmių medus':gy>=50?'🍄 Grybas':'🌰 Sėkla')+' +'+t+' maisto!','good');fx.push({x:cxi(c),y:cyi(c),txt:'+'+t,l:1.5});}
+  S.stats.depth=Math.max(S.stats.depth,gy);
   if(gy===0&&gxOf(c)!==40)toast('Naujas įėjimas į paviršių!','good','entr'+gx);
   drawRegion(gx-2,gy-2,gx+2,gy+2);
 }
@@ -265,40 +268,42 @@ let parts=[],fx=[];
 function step(dt){
   S.t+=dt;
   // eating
-  let eat=1;for(const a of ants)eat+=ANT[a.t].eat;for(const b of brood)if(b.st===1)eat+=0.5;
+  let eat=1;for(const a of ants)eat+=ANT[a.t].eat;for(const b of brood)if(b.st===1)eat+=0.5;eat*=eatM();
   S.food-=eat*dt/60;
   if(S.food<0){S.starve+=-S.food;S.food=0;
-    if(S.starve>=3){S.starve=0;if(ants.length>2){let w=ants[0];for(const a of ants)if(a.hp/ANT[a.t].hp<w.hp/ANT[w.t].hp||(a.hp/ANT[a.t].hp===w.hp/ANT[w.t].hp&&a.id>w.id))w=a;
+    if(S.starve>=3){S.starve=0;if(ants.length>2){let w=ants[0];for(const a of ants)if(a.hp/maxHp(a)<w.hp/maxHp(w)||(a.hp/maxHp(a)===w.hp/maxHp(w)&&a.id>w.id))w=a;
       killAnt(w);toast('Badas! Silpniausia skruzdė mirė iš bado. Rinkite maistą!','warn');}
       else if(brood.length){brood.pop();toast('Badas! Žuvo lerva.','warn');}}}
   else if(S.food>2)S.starve=0;
   // queen lays
   S.layT+=dt;
   if(S.layT>=LAY_T){S.layT=0;const t=S.prod;
-    if(t!=='p'&&ANT[t].lvl<=S.level){const cost=ANT[t].cost;
-      if(S.food>=cost+1&&brood.length<caps.nurs&&ants.length+brood.length<caps.pop){
-        S.food-=cost;const nr=rooms.filter(r=>r.type===3);const pool=(nr.length?nr[(Math.random()*nr.length)|0]:rooms.find(r=>r.type===1)||{cells:dugList}).cells;
-        const c=pool[(Math.random()*pool.length)|0];brood.push({t,st:0,tm:0,x:cxi(c)+rnd(-4,4),y:cyi(c)+rnd(-3,4)});}
+    if(t!=='p'&&ANT[t].lvl<=S.level){
+      if(layEgg(false)){}
       else if(brood.length>=caps.nurs)hintOnce('nurs','Peryklė pilna – iškask urvą ir paskirk jį „Peryklė“, kad karalienė dėtų daugiau kiaušinių.');
       else if(ants.length+brood.length>=caps.pop)hintOnce('pop','Pasiekta skruzdžių riba – iškask urvą ir paskirk jį „Poilsis“.');
     }}
   for(let i=brood.length-1;i>=0;i--){const b=brood[i];b.tm+=dt;
-    if(b.st===0&&b.tm>=EGG_T){b.st=1;b.tm=0;}
-    else if(b.st===1&&b.tm>=LARVA_T){brood.splice(i,1);addAnt(b.t,b.x,b.y);if(!S.hints['born'+b.t]){S.hints['born'+b.t]=1;toast('Išsirito '+ANT[b.t].name.toLowerCase()+'!','good');}}}
+    if(b.st===0&&b.tm>=EGG_T*brdM()){b.st=1;b.tm=0;}
+    else if(b.st===1&&b.tm>=LARVA_T*brdM()){brood.splice(i,1);addAnt(b.t,b.x,b.y);if(!S.hints['born'+b.t]){S.hints['born'+b.t]=1;toast('Išsirito '+ANT[b.t].name.toLowerCase()+'!','good');}}}
   // level
   let L=1;for(let i=0;i<LVL_THR.length;i++)if(ants.length>=LVL_THR[i])L=i+1;
   if(L>S.level){S.level=L;levelUp(L);}
   // food spawn
   S.spawnT-=dt;if(S.spawnT<=0){S.spawnT=rnd(4,7);spawnFood(false);}
   for(let i=items.length-1;i>=0;i--){const it=items[i];it.age+=dt;if(it.age>(revealed[it.x]?300:150)&&!it.mk&&!it.ass.length)items.splice(i,1);}
-  weather(dt);enemiesStep(dt);
+  weather(dt);enemiesStep(dt);rivalStep(dt);
   for(const a of ants)updAnt(a,dt);
   // regen
-  for(const a of ants)if(!onSurface(a))a.hp=Math.min(ANT[a.t].hp,a.hp+dt*0.5);
+  for(const a of ants)if(!onSurface(a))a.hp=Math.min(maxHp(a),a.hp+dt*0.5);
   queen.phase+=dt;
   for(let i=parts.length-1;i>=0;i--){const p=parts[i];p.l-=dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=80*dt;if(p.l<=0)parts.splice(i,1);}
   for(let i=fx.length-1;i>=0;i--){fx[i].l-=dt;fx[i].y-=15*dt;if(fx[i].l<=0)fx.splice(i,1);}
 }
+function layEgg(off){const t=S.prod;if(t==='p'||ANT[t].lvl>S.level)return false;const cost=ANT[t].cost;
+  if(!(S.food>=cost+(off?6:1)&&brood.length<caps.nurs&&ants.length+brood.length<caps.pop))return false;
+  S.food-=cost;const nr=rooms.filter(r=>r.type===3);const pool=(nr.length?nr[(Math.random()*nr.length)|0]:rooms.find(r=>r.type===1)||{cells:dugList}).cells;
+  const c=pool[(Math.random()*pool.length)|0];brood.push({t,st:0,tm:0,x:cxi(c)+rnd(-4,4),y:cyi(c)+rnd(-3,4)});return true;}
 function hintOnce(k,m){if(S.hints[k])return;S.hints[k]=1;toast(m);}
 function levelUp(L){const u={2:'Atrakinta: Kareivės ir Molio sluoksnis!',3:'Atrakinta: Žvalgės!',4:'Atrakinta: Akmens sluoksnis, kasimas greitesnis!',5:'Kasimas dar greitesnis!',6:'Atrakinta: Gelmės su retu maistu!'};
   toast('⭐ Lygis '+L+'! '+(u[L]||'Kasimas greitesnis!'),'good');updateProdButtons();}
@@ -325,10 +330,10 @@ function enemiesStep(dt){
     let vx;if(e.leave)vx=(e.x<WW/2?-1:1)*40;else if(tgt)vx=Math.sign(tgt.x-e.x)*(td>6?30:0);else vx=Math.sign(40*C-e.x)*20*(Math.abs(40*C-e.x)>60?1:0);
     e.x+=vx*dt;if(vx)e.dir=Math.sign(vx);
     if(tgt&&td<10){tgt.hp-=(tgt.t==='s'?3:5)*dt;if(tgt.hp<=0){killAnt(tgt);toast('Voras sugavo skruzdę!','warn');}}
-    for(const a of ants)if(a.t==='s'&&onSurface(a)&&Math.abs(a.x-e.x)<16){e.hp-=8*dt;}
+    for(const a of ants)if(a.t==='s'&&onSurface(a)&&Math.abs(a.x-e.x)<16){e.hp-=8*dt*solM();}
     if(e.hp<=0){enemies.splice(i,1);const gx=Math.max(2,Math.min(W-3,Math.floor(e.x/C)));
       items.push({id:S.nextId++,x:gx,t:'spider',amt:24,need:2,mk:true,age:0,ass:[],arr:[]});revealed[gx]=1;
-      toast('⚔ Kareivės nugalėjo vorą! Jis tapo maistu.','good');continue;}
+      S.stats.spiders++;toast('⚔ Kareivės nugalėjo vorą! Jis tapo maistu.','good');continue;}
     if(e.leave&&(e.x<-20||e.x>WW+20)){enemies.splice(i,1);toastT('sleft','Voras pasitraukė.','',5);}
   }
   // bird
@@ -342,6 +347,144 @@ function enemiesStep(dt){
       bird=null;}}
 }
 
+
+// ===== Patobulinimai / Užduotys / Priešų kolonija / Neprisijungus =====
+const UPG={dig:{n:'⛏ Greitesnis kasimas',d:'+20% kasimo greičio',b:40},
+ sol:{n:'⚔ Stipresnės kareivės',d:'+25% kareivių jėgos ir gyvybių',b:50},
+ sto:{n:'📦 Didesni sandėliai',d:'+30 maisto talpos',b:35},
+ spd:{n:'🦵 Greitesnės kojos',d:'+10% skruzdžių greičio',b:45},
+ eat:{n:'🍃 Taupus apetitas',d:'−8% suvalgomo maisto',b:40},
+ brd:{n:'🥚 Greitesnis perėjimas',d:'−10% kiaušinio ir lervos laiko',b:45}};
+const UPMAX=5;
+function upL(k){return (S.up&&S.up[k])||0}
+function upCost(k){return Math.round(UPG[k].b*Math.pow(1.7,upL(k))/5)*5}
+function solM(){return 1+0.25*upL('sol')}
+function spdM(){return 1+0.1*upL('spd')}
+function eatM(){return 1-0.08*upL('eat')}
+function brdM(){return 1-0.1*upL('brd')}
+function maxHp(a){return ANT[a.t].hp*(a.t==='s'?solM():1)}
+const nSto=()=>rooms.filter(r=>r.type===2).length;
+const QUESTS=[
+ {id:'a8',n:'Užaugink 8 skruzdes',g:()=>ants.length,N:8,r:{f:30}},
+ {id:'s1',n:'Paskirk sandėlį',g:nSto,N:1,r:{f:40}},
+ {id:'f100',n:'Surink 100 maisto',g:()=>S.stats.food,N:100,r:{f:40}},
+ {id:'clay',n:'Prasikask iki molio',g:()=>S.stats.depth,N:25,r:{f:50}},
+ {id:'a15',n:'Užaugink 15 skruzdžių',g:()=>ants.length,N:15,r:{f:60}},
+ {id:'spi',n:'Nugalėk vorą',g:()=>S.stats.spiders,N:1,r:{f:30,u:'sol'}},
+ {id:'s3',n:'Paskirk 3 sandėlius',g:nSto,N:3,r:{f:80}},
+ {id:'f500',n:'Surink 500 maisto',g:()=>S.stats.food,N:500,r:{u:'dig'}},
+ {id:'stone',n:'Prasikask iki akmens',g:()=>S.stats.depth,N:50,r:{f:100}},
+ {id:'a30',n:'Užaugink 30 skruzdžių',g:()=>ants.length,N:30,r:{f:150}},
+ {id:'riv',n:'Nugalėk priešų koloniją',g:()=>S.stats.rivals,N:1,r:{f:200,u:'spd'}},
+ {id:'f2000',n:'Surink 2000 maisto',g:()=>S.stats.food,N:2000,r:{u:'eat'}},
+ {id:'deep',n:'Pasiek gelmes',g:()=>S.stats.depth,N:80,r:{f:250}},
+ {id:'a60',n:'Užaugink 60 skruzdžių',g:()=>ants.length,N:60,r:{f:300,u:'brd'}}];
+function migrate(){
+  S.up=Object.assign({dig:0,sol:0,sto:0,spd:0,eat:0,brd:0},S.up||{});
+  if(!S.stats){let dp=0;for(const c of dugList)dp=Math.max(dp,rowOf(c)-1);S.stats={food:0,spiders:0,rivals:0,depth:dp};}
+  S.stats=Object.assign({food:0,spiders:0,rivals:0,depth:0},S.stats);
+  S.qd=S.qd||{};
+  S.rival=Object.assign({st:0,hp:0,mhp:200,gen:0,raidT:200,fT:5,back:0,atk:0},S.rival||{});
+  S.ver=2;}
+function questsVisible(){return QUESTS.filter(q=>!S.qd[q.id]).slice(0,4);}
+function qReady(q){return q.g()>=q.N;}
+function rewTxt(r){const p=[];if(r.f)p.push('+'+r.f+' 🍖');if(r.u)p.push('nemokamai: '+UPG[r.u].n);return p.join(', ');}
+function claimQuest(id){const q=QUESTS.find(x=>x.id===id);if(!q||S.qd[id]||!qReady(q))return;S.qd[id]=1;
+  let f=q.r.f||0;if(q.r.u){if(upL(q.r.u)<UPMAX)S.up[q.r.u]++;else f+=upCost(q.r.u);}
+  S.food+=f;rebuildRooms();toast('🏆 Užduotis įvykdyta! '+rewTxt(q.r),'good');save();}
+function questPanel(){
+  const vis=questsVisible(),done=Object.keys(S.qd).length;
+  const rows=vis.map(q=>{const v=Math.min(q.N,Math.floor(q.g())),ok=v>=q.N;
+    return '<div class="qi"><div class="tx">'+q.n+'<small>'+v+' / '+q.N+' · '+rewTxt(q.r)+'</small><div class="pb"><i style="width:'+(v/q.N*100)+'%"></i></div></div>'+
+      '<button data-a="q:'+q.id+'"'+(ok?'':' disabled')+'>'+(ok?'Atsiimti':'Vykdoma')+'</button></div>';}).join('');
+  sheet('<h3>📜 Užduotys</h3><p>Įvykdyta '+done+' iš '+QUESTS.length+'.</p><div class="ql">'+(rows||'<p>Visos užduotys įvykdytos! 🎉</p>')+'</div><div class="opts"><button class="plain" data-a="x">Uždaryti</button></div>',
+    a=>{if(a&&a.startsWith('q:')){claimQuest(a.slice(2));questPanel();}});}
+function upPanel(){
+  const rows=Object.keys(UPG).map(k=>{const l=upL(k),mx=l>=UPMAX,c=upCost(k),ok=!mx&&S.food>=c;
+    return '<div class="qi"><div class="tx">'+UPG[k].n+' <span class="lv">'+l+'/'+UPMAX+'</span><small>'+UPG[k].d+'</small></div>'+
+      '<button data-a="u:'+k+'"'+(ok?'':' disabled')+'>'+(mx?'Maks.':c+' 🍖')+'</button></div>';}).join('');
+  sheet('<h3>⬆ Patobulinimai</h3><p>Pirk už maistą. Kiekvienas lygis brangesnis. Turi: '+Math.floor(S.food)+' 🍖</p><div class="ql">'+rows+'</div><div class="opts"><button class="plain" data-a="x">Uždaryti</button></div>',
+    a=>{if(a&&a.startsWith('u:')){const k=a.slice(2),c=upCost(k);if(upL(k)<UPMAX&&S.food>=c){S.food-=c;S.up[k]++;rebuildRooms();toast(UPG[k].n+' → '+S.up[k]+' lygis','good');save();}upPanel();}});}
+function updBadges(){const n=questsVisible().filter(qReady).length;const b=document.getElementById('qBadge');b.textContent=n;b.classList.toggle('hidden',!n);
+  const cu=Object.keys(UPG).some(k=>upL(k)<UPMAX&&S.food>=upCost(k));document.getElementById('uBadge').classList.toggle('hidden',!cu);}
+
+// --- priešų kolonija ---
+const RGX=75,RX=RGX*C+C/2;let rv=[];
+function rivalRaid(){return rv.some(r=>r.k==='r');}
+function rivalStep(dt){const R=S.rival,rain=S.weather.phase==='rain';
+  if(R.st===0){if(S.level>=4){R.st=1;R.mhp=200;R.hp=200;R.raidT=180;for(let x=RGX-4;x<W;x++)revealed[x]=1;
+      toast('🐜 Šalia įsikūrė priešų kolonija! Ji vagia maistą ir kartais puola.','warn');hintOnce('rivh','Bakstelėk priešų skruzdėlyną dešinėje, kad pasiųstum kareives jį sugriauti.');}return;}
+  if(R.st===2){R.back-=dt;if(R.back<=0){R.st=1;R.gen++;R.mhp=Math.round(200*Math.pow(1.5,R.gen));R.hp=R.mhp;R.raidT=200;R.atk=0;toast('🐜 Priešų kolonija vėl įsikūrė – dar stipresnė!','warn');}return;}
+  // foragers
+  const nf=Math.min(4,1+Math.floor((S.level-4)/2));R.fT-=dt;
+  if(!rain&&R.fT<=0&&rv.filter(r=>r.k==='f').length<nf){R.fT=rnd(6,12);rv.push({k:'f',x:RX,hp:8,st:'go',tid:0,ph:0,dir:-1,carry:0,wait:0});}
+  // raid
+  if(!rain&&!enemies.length){R.raidT-=dt;if(R.raidT<=0){R.raidT=rnd(220,360);const n=Math.min(7,2+R.gen+Math.floor(S.level/3));
+    R.raids=(R.raids||0)+1;for(let k=0;k<n;k++)rv.push({k:'r',x:RX+k*8,hp:12,st:'go',ph:0,dir:-1,carry:0,wait:0});
+    toast('⚠ Priešų skruzdės puola! Kareivės – į kovą!','warn');
+    ants.forEach(a=>{if(a.t!=='s'&&(onSurface(a)||(a.job&&a.job.k==='food')))goHome(a);else if(a.t==='s'&&a.st==='idle'){a.path=[];a.wait=0;}});}}
+  // defenders while our soldiers are near the mound
+  const near=ants.filter(a=>a.t==='s'&&onSurface(a)&&Math.abs(a.x-RX)<70);
+  if(near.length&&rv.filter(r=>r.k==='d').length<3){R.dT=(R.dT||0)-dt;if(R.dT<=0){R.dT=4;rv.push({k:'d',x:RX,hp:10,st:'go',ph:0,dir:-1,carry:0,wait:0});}}
+  for(const a of near)if(Math.abs(a.x-RX)<22)R.hp-=3*solM()*dt;
+  const ex=40*C+C/2;
+  for(let i=rv.length-1;i>=0;i--){const r=rv[i];r.ph+=dt*10;let tx=r.x,sp=40;
+    if(rain&&r.k!=='d')r.st='back';
+    if(r.k==='f'){
+      if(r.st==='go'){let it=items.find(x=>x.id===r.tid);
+        if(!it){it=null;let bd=36;for(const x of items){if(x.rv||x.mk||x.ass.length)continue;const d=Math.abs(x.x-RGX);if(d<bd){bd=d;it=x;}}if(it){it.rv=1;r.tid=it.id;}else r.st='back';}
+        if(it){tx=it.x*C+C/2;if(Math.abs(tx-r.x)<2){r.wait+=dt;if(r.wait>2){items.splice(items.indexOf(it),1);r.carry=1;r.ct=it.t;r.st='back';}}}}
+      if(r.st==='back')tx=RX;}
+    else if(r.k==='r'){
+      if(r.st==='go'){tx=ex;if(Math.abs(r.x-ex)<4){const s=Math.min(S.food,8);S.food-=s;if(s>0){fx.push({x:ex,y:GY-14,txt:'−'+Math.round(s),l:1.5});toastT('stolen','Priešai pavogė maisto!','warn',6);}r.carry=1;r.ct='crumb';r.st='back';}}
+      else tx=RX;sp=30;}
+    else{let t=null,td=1e9;for(const a of near){const d=Math.abs(a.x-r.x);if(d<td){td=d;t=a;}}tx=t?t.x:RX;sp=32;}
+    // fight with our surface ants
+    if(r.k!=='f'){let t=null,td=10;for(const a of ants){if(!onSurface(a))continue;const d=Math.abs(a.x-r.x);if(d<td){td=d;t=a;}}
+      if(t){tx=r.x;t.hp-=(t.t==='s'?3:5)*dt;if(t.hp<=0){killAnt(t);toast('Priešų skruzdės nukovė mūsiškę!','warn');}}}
+    for(const a of ants)if(a.t==='s'&&onSurface(a)&&Math.abs(a.x-r.x)<16)r.hp-=8*solM()*dt;
+    if(r.hp<=0){rv.splice(i,1);if(r.k==='r'&&!rivalRaid())toast('⚔ Antpuolis atremtas!','good');continue;}
+    const dx=tx-r.x;if(Math.abs(dx)>1){r.x+=Math.sign(dx)*Math.min(Math.abs(dx),sp*dt);r.dir=Math.sign(dx);}
+    if(r.st==='back'&&Math.abs(r.x-RX)<3){if(r.carry)R.hp=Math.min(R.mhp,R.hp+2);rv.splice(i,1);}}
+  if(R.hp<=0){R.st=2;R.back=900;R.atk=0;R.hp=0;rv=[];S.stats.rivals++;const rw=150+R.gen*100;S.food+=rw;
+    fx.push({x:RX,y:GY-30,txt:'+'+rw,l:2});toast('🏆 Priešų kolonija sugriauta! +'+rw+' maisto.','good');ants.forEach(a=>{if(a.t==='s'&&onSurface(a)){a.path=[];a.wait=0;a.st='idle';}});save();}
+}
+function rivalTarget(a){const R=S.rival;if(R.st!==1)return null;
+  let t=null,td=1e9;for(const r of rv){if(r.k==='f'&&!revealed[Math.floor(r.x/C)])continue;const d=Math.abs(r.x-a.x);if(d<td){td=d;t=r;}}
+  if(t&&(t.k!=='f'||td<40*C))return t.x;if(R.atk)return RX;return null;}
+function rivalMenu(){const R=S.rival,ns=ants.filter(a=>a.t==='s').length;
+  sheet('<h3>🐜 Priešų kolonija</h3><p>Ji renka maistą ir kartais puola tavo skruzdėlyną. Sugriauk ją kareivėmis – gausi '+(150+R.gen*100)+' 🍖.</p><p><b>Gyvybės: '+Math.ceil(R.hp)+' / '+R.mhp+'</b> · Tavo kareivių: '+ns+'</p><div class="opts">'+
+    (R.atk?'<button data-a="s">🛑 Sustabdyti puolimą</button>':'<button class="pri" data-a="a">⚔ Siųsti kareives pulti</button>')+'<button class="plain" data-a="x">Uždaryti</button></div>',
+    a=>{if(a==='a'){if(!ns){toast('Neturi kareivių! Karalienė gali jų užauginti nuo 2 lygio.','warn');return;}R.atk=1;toast('⚔ Kareivės žygiuoja į priešų koloniją!','good');ants.forEach(x=>{if(x.t==='s'&&x.st==='idle'){x.path=[];x.wait=0;}});save();}
+      if(a==='s'){R.atk=0;ants.forEach(x=>{if(x.t==='s'&&onSurface(x))goHome(x);});save();}});}
+function drawRival(g){const R=S.rival;if(R.st===0)return;
+  if(R.st===1){g.fillStyle='#8a5a3c';g.beginPath();g.ellipse(RX,GY,44,26,0,Math.PI,0);g.fill();g.fillStyle='#a06b47';g.beginPath();g.ellipse(RX-8,GY-8,24,12,0,Math.PI,0);g.fill();
+    g.fillStyle='#3b2416';g.beginPath();g.ellipse(RX,GY-2,7,5,0,Math.PI,0);g.fill();
+    g.strokeStyle='#4a2f1c';g.lineWidth=1.5;g.beginPath();g.moveTo(RX+20,GY-22);g.lineTo(RX+20,GY-44);g.stroke();g.fillStyle='#7b3fa0';g.beginPath();g.moveTo(RX+20,GY-44);g.lineTo(RX+34,GY-39);g.lineTo(RX+20,GY-34);g.fill();
+    if(R.hp<R.mhp||R.atk){g.fillStyle='#c0392b';g.fillRect(RX-22,GY-34,44,4);g.fillStyle='#2ecc71';g.fillRect(RX-22,GY-34,44*R.hp/R.mhp,4);}}
+  else{g.fillStyle='#9b7a5c';g.beginPath();g.ellipse(RX,GY,30,8,0,Math.PI,0);g.fill();}
+  for(const r of rv)drawAnt(g,r.x,GY-4,r.dir>0?0:Math.PI,'r',r.ph,r.carry,r.ct);}
+
+// --- neprisijungus ---
+let offRep=null;
+function offline(sec){const r={sec,got:0,ate:0,born:0,laid:0};let t=sec;
+  while(t>0){const h=Math.min(10,t);t-=h;
+    const wk=ants.filter(a=>a.t==='w').length;const g=Math.min(Math.min(wk*1.5,40)*spdM()*h/60,Math.max(0,caps.food-S.food));S.food+=g;r.got+=g;
+    let eat=1;for(const a of ants)eat+=ANT[a.t].eat;for(const b of brood)if(b.st===1)eat+=0.5;eat*=eatM();
+    const e=Math.min(S.food,eat*h/60);S.food-=e;r.ate+=e;
+    S.layT+=h;while(S.layT>=LAY_T){S.layT-=LAY_T;if(layEgg(true))r.laid++;}
+    for(let i=brood.length-1;i>=0;i--){const b=brood[i];b.tm+=h;
+      if(b.st===0&&b.tm>=EGG_T*brdM()){b.st=1;b.tm=0;}
+      else if(b.st===1&&b.tm>=LARVA_T*brdM()){brood.splice(i,1);const c=randomHomeCell();addAnt(b.t,cxi(c),cyi(c));r.born++;}}}
+  S.layT=0;let L=1;for(let i=0;i<LVL_THR.length;i++)if(ants.length>=LVL_THR[i])L=i+1;if(L>S.level)S.level=L;
+  return r;}
+function fmtDur(s){const h=Math.floor(s/3600),m=Math.floor(s%3600/60);return (h?h+' val. ':'')+m+' min.';}
+function showOffline(r){sheet('<h3>🌙 Kol tavęs nebuvo</h3><p>Praėjo '+fmtDur(r.sec)+(r.capped?' (skaičiuojama daugiausiai 8 val.)':'')+'</p><div class="ql">'+
+  '<div class="qi"><div class="tx">🍖 Surinkta maisto<small>darbininkės nešė į sandėlį</small></div><b>+'+Math.round(r.got)+'</b></div>'+
+  '<div class="qi"><div class="tx">🍽 Suvalgyta<small>kolonija valgė</small></div><b>−'+Math.round(r.ate)+'</b></div>'+
+  '<div class="qi"><div class="tx">🥚 Padėta kiaušinių</div><b>'+r.laid+'</b></div>'+
+  '<div class="qi"><div class="tx">🐜 Išsirito skruzdžių</div><b>+'+r.born+'</b></div></div><div class="opts"><button class="pri" data-a="x">Puiku!</button></div>');}
+
 // ===== Rendering =====
 const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
 let VW=0,VH=0,DPR=1;const cam={x:0,y:0,z:1};
@@ -350,7 +493,7 @@ function minZ(){return Math.max(VW/WW,0.45);}
 function clampCam(){cam.z=Math.max(minZ(),Math.min(3,cam.z));const vw=VW/cam.z,vh=VH/cam.z;
   cam.x=Math.max(0,Math.min(WW-vw,cam.x));cam.y=Math.max(-40,Math.min(WH+120/cam.z-vh,cam.y));}
 function drawAnt(g,x,y,ang,t,ph,carry,ct){
-  const s=t==='s'?1.25:t==='c'?0.95:1;const col=t==='s'?'#b2341f':t==='c'?'#2f6fd1':'#2a1d17';
+  const s=t==='s'?1.25:t==='c'?0.95:1;const col=t==='s'?'#b2341f':t==='c'?'#2f6fd1':t==='r'?'#6a2c8a':'#2a1d17';
   g.save();g.translate(x,y);g.rotate(ang);g.scale(s,s);
   g.strokeStyle=col;g.lineWidth=0.9;g.lineCap='round';
   for(let i=-1;i<=1;i++){const sw=Math.sin(ph+i*2.1)*1.6*(i===0?1:-1);
@@ -442,7 +585,8 @@ function render(time){
   // ants
   for(const a of ants){if(a.x<vx0-12||a.x>vx1+12||a.y<vy0-12||a.y>vy1+12)continue;
     if(onSurface(a)&&ph==='rain'){} drawAnt(g,a.x,a.y,a.ang,a.t,a.phase,a.carry,a.ct);
-    if(a.hp<ANT[a.t].hp*0.99&&onSurface(a)){g.fillStyle='#c0392b';g.fillRect(a.x-5,a.y-9,10,1.6);g.fillStyle='#2ecc71';g.fillRect(a.x-5,a.y-9,10*a.hp/ANT[a.t].hp,1.6);}}
+    if(a.hp<maxHp(a)*0.99&&onSurface(a)){g.fillStyle='#c0392b';g.fillRect(a.x-5,a.y-9,10,1.6);g.fillStyle='#2ecc71';g.fillRect(a.x-5,a.y-9,10*a.hp/maxHp(a),1.6);}}
+  drawRival(g);
   for(const e of enemies)drawSpider(g,e);
   if(bird){const sh=1-bird.t/4;g.fillStyle='rgba(0,0,0,'+(0.15+sh*0.3)+')';g.beginPath();g.ellipse(bird.x,GY-3,10+sh*8,3,0,0,7);g.fill();
     const by=GY-120+sh*100;g.save();g.translate(bird.x,by);g.fillStyle='#455a64';g.beginPath();g.ellipse(0,0,10,6,0,0,7);g.fill();
@@ -505,6 +649,7 @@ function tryQueue(gx,gy){if(gx<1||gx>W-2||gy<0||gy>H-2)return false;const i=idx(
   queued[i]=1;return true;}
 
 function tap(sx,sy){const wx=cam.x+sx/cam.z,wy=cam.y+sy/cam.z;
+  if(S.rival.st===1&&wy<GY+4&&wy>GY-50&&Math.abs(wx-RX)<50){rivalMenu();return;}
   if(wy<GY+4){let best=null,bd=22;for(const it of items){if(!revealed[it.x])continue;const d=Math.hypot(it.x*C+C/2-wx,GY-6-wy);if(d<bd){bd=d;best=it;}}
     if(best){if(surfDanger()&&!best.mk)toastT('dng','Dabar pavojinga – skruzdės eis vėliau.','',4);best.mk=!best.mk;
       if(best.mk&&best.need>1)toastT('need'+best.t,FOODT[best.t].n+': reikia '+best.need+' darbininkių kartu.','',6);
@@ -540,7 +685,7 @@ function sheet(html,cb){const sh=document.getElementById('sheet'),card=document.
 // ===== Tutorial =====
 const TUT=[
  ['🐜 Sveiki!','Tavo karalienė ir 4 darbininkės gyvena mažame urve po žeme. Užaugink didžiausią koloniją!'],
- ['🍖 Maistas','Bakstelėk maistą paviršiuje (trupinius, sėklas, uogas) – laisvos darbininkės jį parneš. Uogą ir vabalą neša kelios kartu.'],
+ ['🍖 Maistas','Laisvos darbininkės pačios parneša matomą maistą. Bakstelėk maistą – jis bus parneštas pirmiausia. Uogą ir vabalą neša kelios kartu.'],
  ['⛏ Kasimas','Spausk „Kasti“ ir brėžk pirštu nuo esamo tunelio. „Tunelis“ – siauras takas, „Urvas“ – plati erdvė. Gilesni sluoksniai kietesni, bet juose yra retų radinių.'],
  ['🏠 Urvai','Iškask bent 4×4 erdvę, bakstelėk ją ir paskirk: Sandėlis (daugiau maisto), Peryklė (daugiau kiaušinių), Poilsis (daugiau skruzdžių).'],
  ['👑 Karalienė','Apačioje pasirink, ką ji augins. Kiaušinis → lerva → skruzdė. Visos skruzdės valgo – nepritrūk maisto! Vienu pirštu stumdyk vaizdą, dviem – artink.']];
@@ -556,6 +701,7 @@ function setMode(m){mode=m;$('prodBar').classList.toggle('hidden',m==='dig');$('
   if(m==='dig')hintOnce('digh','Brėžk pirštu nuo tunelio. Dviem pirštais judink vaizdą.');}
 $('btnDig').onclick=()=>setMode('dig');$('btnDone').onclick=()=>{setMode('play');save();};
 document.querySelectorAll('.brush').forEach(b=>b.onclick=()=>{brush=+b.dataset.b;document.querySelectorAll('.brush').forEach(x=>x.classList.toggle('sel',x===b));});
+$('btnQuest').onclick=questPanel;$('btnUp').onclick=upPanel;
 $('btnClear').onclick=()=>{for(let i=0;i<queued.length;i++)if(queued[i]&&!digProg[i])queued[i]=0;ants.forEach(a=>{if(a.job&&a.job.k==='dig'&&!queued[a.job.c]){abortJob(a);a.st='idle';a.path=[];}});toast('Suplanuotas kasimas išvalytas.');save();};
 $('btnMenu').onclick=()=>sheet('<h3>Meniu</h3><p>Žaidimas išsaugomas automatiškai.</p><div class="opts"><button data-a="h">❓ Pagalba</button><button data-a="c">🎯 Rodyti karalienę</button><button class="danger" data-a="r">Nauja kolonija</button><button class="plain" data-a="x">Uždaryti</button></div>',a=>{
   if(a==='h')showTut(0);if(a==='c')centerQueen();
@@ -581,24 +727,26 @@ function load(){try{const raw=localStorage.getItem(SAVE_KEY);if(!raw)return fals
   S=d.S;S.hints=S.hints||{};dug=new Uint8Array(W*ROWS);room=new Uint8Array(W*ROWS);queued=new Uint8Array(W*ROWS);digProg=new Float32Array(W*ROWS);revealed=new Uint8Array(W);
   unpack(d.dug,dug);unpack(d.room,room);unpack(d.rev,revealed);
   ants=d.ants.map(a=>Object.assign({path:[],st:'idle',wait:0,job:null,ct:'seed',phase:0,ang:0,ox:rnd(-4,4),oy:rnd(-4,4)},a));
-  brood=d.brood||[];items=d.items||[];enemies=[];bird=null;afterLoad();return true;}catch(e){console.warn('load fail',e);return false;}}
+  brood=d.brood||[];items=d.items||[];enemies=[];bird=null;afterLoad();
+  if(d.saved){const el=(Date.now()-d.saved)/1000;if(el>120){const r=offline(Math.min(8*3600,el));r.capped=el>8*3600;r.sec=Math.min(8*3600,el);rebuildRooms();offRep=r;}}
+  return true;}catch(e){console.warn('load fail',e);return false;}}
 
 // ===== Main loop =====
 let last=performance.now(),saveT=0;
 function frame(now){const dt=Math.min(0.1,(now-last)/1000);last=now;
   if(document.getElementById('sheet').classList.contains('hidden')||S.tut===99){step(dt);}
   saveT+=dt;if(saveT>5){saveT=0;save();}
-  hudT+=dt;if(hudT>0.25){hudT=0;hud();}
+  hudT+=dt;if(hudT>0.25){hudT=0;hud();updBadges();}
   render(now);requestAnimationFrame(frame);}
 document.addEventListener('visibilitychange',()=>{if(document.hidden)save();else last=performance.now();});
 window.addEventListener('pagehide',save);window.addEventListener('resize',resize);
 // test hook
 window.__game={get S(){return S},get ants(){return ants},get items(){return items},get brood(){return brood},get caps(){return caps},get rooms(){return rooms},
-  step,save,load,dug:()=>dug,room:()=>room,queued:()=>queued,idx,tryQueue:(x,y)=>{gest=gest||{};return tryQueue(x,y);},roomMenu,cam,cellAt,completeDig,enemies:()=>enemies,setMode};
+  step,save,load,dug:()=>dug,room:()=>room,queued:()=>queued,idx,tryQueue:(x,y)=>{gest=gest||{};return tryQueue(x,y);},roomMenu,cam,cellAt,completeDig,enemies:()=>enemies,setMode,rv:()=>rv,offline,questPanel,upPanel,rivalMenu,claimQuest,RX};
 
 resize();
 if(!load()){newGame();}
 centerQueen();updateProdButtons();hud();
-if(S.tut!==99)showTut(0);
+if(S.tut!==99)showTut(0);else if(offRep)showOffline(offRep);
 requestAnimationFrame(frame);
 if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{});

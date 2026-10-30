@@ -7,7 +7,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#3b2a20;font-family:-a
 #pLvl{padding-bottom:8px}
 .bar{position:absolute;left:8px;right:8px;bottom:3px;height:3px;background:#e5d6c3;border-radius:2px;overflow:hidden}
 .bar i{display:block;height:100%;width:0;background:#f2a530}
-.round{pointer-events:auto;margin-left:auto;width:38px;height:38px;border-radius:50%;border:0;background:rgba(255,255,255,.92);font-size:18px;font-weight:800;color:#4a2f1c;box-shadow:0 2px 0 rgba(0,0,0,.18)}
+.round{pointer-events:auto;position:relative;flex:0 0 auto;width:36px;height:36px;padding:0;border-radius:50%;border:0;background:rgba(255,255,255,.92);font-size:18px;font-weight:800;color:#4a2f1c;box-shadow:0 2px 0 rgba(0,0,0,.18)}
 #weather{position:fixed;top:calc(env(safe-area-inset-top) + 52px);left:50%;transform:translateX(-50%);pointer-events:none}
 #weather div{background:#3d5a80;color:#fff;font-weight:700;font-size:13px;padding:5px 12px;border-radius:12px}
 #toasts{position:fixed;left:0;right:0;top:calc(env(safe-area-inset-top) + 84px);display:flex;flex-direction:column;align-items:center;gap:5px;pointer-events:none}
@@ -38,3 +38,15 @@ html,body{margin:0;height:100%;overflow:hidden;background:#3b2a20;font-family:-a
 .card button.danger{background:#e74c3c;color:#fff;box-shadow:0 3px 0 #a33224;text-align:center}
 .card button.plain{background:transparent;box-shadow:none;text-align:center;opacity:.7}
 .card .dots{text-align:center;margin-bottom:10px;color:#c9a97e;letter-spacing:4px}
+#btnQuest{margin-left:auto}
+.badge{position:absolute;top:-3px;right:-3px;min-width:17px;height:17px;border-radius:9px;background:#e74c3c;color:#fff;font-size:11px;font-style:normal;font-weight:800;line-height:17px;text-align:center;padding:0 4px}
+.badge.dot{min-width:11px;width:11px;height:11px;padding:0;top:-1px;right:-1px;background:#3cb371}
+.ql{display:flex;flex-direction:column;gap:7px;margin:8px 0 12px;max-height:56vh;overflow-y:auto}
+.qi{background:#f6ead6;border-radius:12px;padding:8px 10px;display:flex;align-items:center;gap:8px;text-align:left;color:#4a2f1c}
+.qi .tx{flex:1;font-size:14px;font-weight:800}
+.qi .tx small{display:block;font-weight:600;opacity:.75;font-size:11.5px;margin-top:2px}
+.qi .lv{font-size:11px;background:#ffcf5c;border-radius:8px;padding:1px 6px;margin-left:2px}
+.qi .pb{height:5px;background:#e5d6c3;border-radius:3px;margin-top:5px;overflow:hidden}.qi .pb i{display:block;height:100%;background:#f2a530}
+.qi>button{flex:0 0 auto;border:0;border-radius:10px;padding:8px 10px;font-weight:800;font-size:12.5px;background:#3cb371;color:#fff;box-shadow:0 2px 0 #23784a}
+.qi>button:disabled{background:#cdbba3;box-shadow:none}
+.qi>b{font-size:15px}
