@@ -50,3 +50,14 @@ html,body{margin:0;height:100%;overflow:hidden;background:#3b2a20;font-family:-a
 .qi>button{flex:0 0 auto;border:0;border-radius:10px;padding:8px 10px;font-weight:800;font-size:12.5px;background:#3cb371;color:#fff;box-shadow:0 2px 0 #23784a}
 .qi>button:disabled{background:#cdbba3;box-shadow:none}
 .qi>b{font-size:15px}
+
+#seas{position:fixed;top:calc(env(safe-area-inset-top) + 52px);left:10px;background:rgba(255,255,255,.92);color:#4a2f1c;font-weight:800;font-size:12.5px;padding:4px 10px;border-radius:12px;box-shadow:0 2px 0 rgba(0,0,0,.18);pointer-events:none}
+#raid{position:fixed;top:calc(env(safe-area-inset-top) + 84px);left:50%;transform:translateX(-50%);background:#c0392b;color:#fff;font-weight:800;font-size:14px;padding:6px 14px;border-radius:12px;box-shadow:0 2px 0 rgba(0,0,0,.25);pointer-events:none;white-space:nowrap;animation:pulse 1s infinite alternate}
+@keyframes pulse{from{opacity:1}to{opacity:.75}}
+body.raidOn #toasts{top:calc(env(safe-area-inset-top) + 118px)}
+#side{position:fixed;right:8px;bottom:calc(env(safe-area-inset-bottom) + 104px);display:flex;flex-direction:column;gap:8px;z-index:2}
+#side .side{border:0;border-radius:14px;width:62px;height:52px;background:rgba(246,234,214,.96);color:#4a2f1c;font-size:20px;font-weight:700;display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 3px 0 #b89a74;padding:0}
+#side .side small{font-size:10px;font-weight:700}
+#side .side.on{background:#ffcf5c;box-shadow:0 3px 0 #c98f12}
+#side .side:active{transform:translateY(2px)}
+.ql h4{margin:8px 0 0;font-size:14px}

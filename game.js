@@ -12,8 +12,90 @@ const ANT={w:{name:'Darbininkė',cost:5,lvl:1,hp:10,spd:2.4,eat:0.6},
            s:{name:'Kareivė',cost:10,lvl:2,hp:30,spd:2.2,eat:1},
            c:{name:'Žvalgė',cost:8,lvl:3,hp:8,spd:3.2,eat:0.8}};
 const FOODT={crumb:{n:'Trupinys',amt:4,need:1},seed:{n:'Sėkla',amt:6,need:1},berry:{n:'Uoga',amt:12,need:2},
-             beetle:{n:'Vabalas',amt:30,need:3},spider:{n:'Voras',amt:24,need:2}};
-const ROOMN={1:'Karalienės urvas',2:'Sandėlis',3:'Peryklė',4:'Poilsis',5:'Kareivinės',6:'Atliekų kamera'};
+             beetle:{n:'Vabalas',amt:30,need:3},spider:{n:'Voras',amt:24,need:2},
+             cone:{n:'Kankorėžio sėkla',amt:8,need:1},mush:{n:'Grybas',amt:14,need:2},fly:{n:'Musė',amt:10,need:1},
+             sugar:{n:'Cukraus gabaliukas',amt:10,need:1},apple:{n:'Obuolio gabalėlis',amt:16,need:2},
+             fruit:{n:'Nukritęs vaisius',amt:80,need:1},dbeetle:{n:'Negyvas vabalas',amt:60,need:1}};
+const ROOMN={1:'Karalienės urvas',2:'Sandėlis',3:'Peryklė',4:'Poilsis',5:'Kareivinės'};
+// ===== Žemėlapiai (biomai), paviršius, sezonai =====
+const SZ=820,Z0=410,TRX=46,TRZ=Z0+110;
+const BIO={meadow:{n:'Pieva',ic:'🌼',g1:'#8fcf6a',g2:'#76b956',food:[['crumb',.35],['seed',.3],['berry',.25],['beetle',.1]],en:{sp:1,pit:1,liz:1,wasp:1,bird:1}},
+ forest:{n:'Miškas',ic:'🌲',g1:'#5f9e4e',g2:'#4c8740',food:[['cone',.35],['seed',.2],['mush',.3],['beetle',.15]],en:{sp:1.4,pit:0.6,liz:1,wasp:1.2,bird:1.3}},
+ sand:{n:'Smėlynas',ic:'🏜',g1:'#e6cf94',g2:'#d6b974',food:[['seed',.4],['fly',.35],['crumb',.15],['beetle',.1]],en:{sp:0.7,pit:2,liz:1.5,wasp:0.8,bird:0.7}},
+ garden:{n:'Sodas',ic:'🌷',g1:'#97d870',g2:'#82c55e',food:[['sugar',.3],['berry',.3],['apple',.25],['crumb',.15]],en:{sp:1,pit:0.8,liz:0.7,wasp:1.5,bird:1.3}}};
+const BIO_ORD=['meadow','forest','sand','garden'];
+function bio(){return BIO[S.biome]||BIO.meadow}
+function BE(k){return bio().en[k]||1}
+function entZ(c){return c===40?Z0:Z0+Math.round((hash(c,3,77)-.5)*240);}
+function plZ(p){return Z0+Math.round((hash(p.x,9,4)-.5)*320);}
+const SEAS=[{n:'Pavasaris',ic:'🌱',d:240},{n:'Vasara',ic:'☀',d:300},{n:'Ruduo',ic:'🍂',d:240},{n:'Žiema',ic:'❄',d:180}],SEAC=960;
+function seasInfo(){let p=(((S.t-(S.sOff||0))%SEAC)+SEAC)%SEAC;for(let i=0;i<4;i++){if(p<SEAS[i].d)return {i,left:SEAS[i].d-p};p-=SEAS[i].d;}return {i:0,left:1};}
+function isWinter(){return seasInfo().i===3;}
+const ACH=[
+ {id:'dig',n:'Kasėja',d:'Iškask 300 langelių',g:()=>S.stats.digs,N:300,u:'⛏ Aštrūs žandikauliai',ud:'+30% kasimo greičio'},
+ {id:'food',n:'Kaupėja',d:'Surink 1000 maisto',g:()=>S.stats.food,N:1000,u:'📦 Gilūs sandėliai',ud:'+60 maisto talpos'},
+ {id:'kill',n:'Gynėja',d:'Nugalėk 5 priešus',g:()=>S.stats.kills,N:5,u:'🛡 Kietas šarvas',ud:'+25% kareivių gyvybių'},
+ {id:'win',n:'Išgyvenusi žiemą',d:'Išgyvenk vieną žiemą',g:()=>S.stats.winters,N:1,u:'❄ Žiemos taupymas',ud:'žiemą suvalgoma 20% mažiau'},
+ {id:'raid',n:'Tvirtovė',d:'Atremk didelį antpuolį',g:()=>S.stats.raids,N:1,u:'⚔ Kovos patirtis',ud:'+20% kareivių jėgos'},
+ {id:'clean',n:'Švara',d:'Išnešk 40 atliekų į šiukšlyną',g:()=>S.dump||0,N:40,u:'🧹 Švarūs urvai',ud:'kolonija suserga daug vėliau'},
+ {id:'gift',n:'Laimingoji',d:'Parnešk 2 retas dovanas',g:()=>S.stats.gifts,N:2,u:'🍎 Gera uoslė',ud:'retos dovanos randamos dažniau'},
+ {id:'terr',n:'Užkariautoja',d:'Užimk priešų teritoriją',g:()=>S.stats.terr,N:1,u:'🐜 Greitas žingsnis',ud:'+10% skruzdžių greičio'}];
+function hasA(id){return !!(S.ach&&S.ach[id]);}
+function achStep(){for(const A of ACH){if(hasA(A.id))continue;if((A.g()||0)>=A.N){S.ach[A.id]=1;rebuildRooms();toast('🏅 Pasiekimas „'+A.n+'“! Atrakinta: '+A.u+' ('+A.ud+')','good');save();}}}
+function hasBarr(){return rooms.some(r=>r.type===5);}
+function surfTZ(a){const j=a.job;
+  if(j){if(j.k==='food'){const it=items.find(i=>i.id===j.id);if(it)return it.z;}
+    if(j.k==='milk'){const p=S.pl.find(q=>q.x===j.x);if(p)return plZ(p);}
+    if((j.k==='waste'&&j.s===1)||j.k==='dirt')return TRZ+(hash(a.id,1,2)-.5)*16;
+    if(j.k==='waste'){const w=S.wst.find(x=>x.id===j.id);if(w&&w.y<GY)return w.z;}}
+  if(a.tz!==null&&a.tz!==undefined)return a.tz;return a.z;}
+let surfBg=null;
+function buildSurf(){const B=bio(),cv2=document.createElement('canvas');cv2.width=WW;cv2.height=SZ;const g=cv2.getContext('2d');
+  g.fillStyle=B.g1;g.fillRect(0,0,WW,SZ);
+  for(let i=0;i<260;i++){const x=hash(i,1,31)*WW,y=hash(i,2,31)*SZ,r=20+hash(i,3,31)*60;g.fillStyle=B.g2;g.globalAlpha=0.35;g.beginPath();g.ellipse(x,y,r,r*0.6,hash(i,4,31)*3,0,7);g.fill();}
+  g.globalAlpha=1;const k=S.biome||'meadow';
+  for(let i=0;i<900;i++){const x=hash(i,5,32)*WW,y=hash(i,6,32)*SZ;
+    if(k==='sand'){g.fillStyle=i%3?'#c9a865':'#f2deaa';g.beginPath();g.arc(x,y,1+hash(i,7,32)*2.2,0,7);g.fill();}
+    else{g.strokeStyle=k==='forest'?'#3f7535':'#5fa645';g.lineWidth=1.2;g.beginPath();g.moveTo(x,y);g.lineTo(x-2,y-5);g.moveTo(x,y);g.lineTo(x+2,y-5);g.stroke();}}
+  for(let i=0;i<70;i++){const x=hash(i,8,33)*WW,y=hash(i,9,33)*SZ;
+    if(k==='meadow'){g.fillStyle=['#fff','#ffe066','#f78fb3'][i%3];for(let p=0;p<5;p++){g.beginPath();g.arc(x+Math.cos(p*1.26)*3,y+Math.sin(p*1.26)*3,2.2,0,7);g.fill();}g.fillStyle='#f5b301';g.beginPath();g.arc(x,y,1.6,0,7);g.fill();}
+    else if(k==='forest'){if(i%2){g.strokeStyle='#8a5a34';g.lineWidth=1.4;g.beginPath();g.moveTo(x,y);g.lineTo(x+9,y+3);g.stroke();}else{g.fillStyle='#6b4a2b';g.globalAlpha=.6;g.beginPath();g.ellipse(x,y,8,5,i,0,7);g.fill();g.globalAlpha=1;}}
+    else if(k==='sand'){g.fillStyle='#b9a27a';g.beginPath();g.ellipse(x,y,5+hash(i,1,1)*6,3+hash(i,2,1)*4,i,0,7);g.fill();g.fillStyle='rgba(255,255,255,.3)';g.beginPath();g.ellipse(x-1,y-1,2,1.2,0,0,7);g.fill();}
+    else{g.fillStyle=['#e74c3c','#f39c12','#9b59b6','#fff'][i%4];g.beginPath();g.arc(x,y,4,0,7);g.fill();g.fillStyle='#3e8e2f';g.beginPath();g.ellipse(x+5,y+3,4,2,0.5,0,7);g.fill();}}
+  if(k==='forest')for(let i=0;i<10;i++){const x=hash(i,3,44)*WW,y=hash(i,4,44)*SZ;if(Math.abs(x-WW/2)<160)continue;g.fillStyle='rgba(30,60,25,.35)';g.beginPath();g.arc(x,y,48,0,7);g.fill();g.fillStyle='#6b4a2b';g.beginPath();g.arc(x,y,13,0,7);g.fill();g.fillStyle='#8a6440';g.beginPath();g.arc(x,y,8,0,7);g.fill();}
+  if(k==='garden'){g.fillStyle='#b88a5a';for(let y=40;y<SZ;y+=180){g.fillRect(0,y,WW,12);}g.fillStyle='rgba(255,255,255,.25)';for(let y=40;y<SZ;y+=180)for(let x=0;x<WW;x+=26)g.fillRect(x,y+2,14,8);}
+  surfBg=cv2;}
+function seasonStep(){const si=seasInfo();
+  if(S.lastSeas===undefined)S.lastSeas=si.i;
+  if(si.i!==S.lastSeas){const pv=S.lastSeas;S.lastSeas=si.i;
+    if(si.i===3){items=items.filter(it=>it.ass.length||it.arr.length);toast('❄ Atėjo žiema! Lauke maisto nebėra – kolonija gyvena iš atsargų.','warn');}
+    else if(si.i===0&&pv===3){S.stats.winters=(S.stats.winters||0)+1;toast('🌱 Kolonija išgyveno žiemą! Prasidėjo pavasaris.','good');}
+    else toast(SEAS[si.i].ic+' Prasidėjo '+SEAS[si.i].n.toLowerCase()+(si.i===2?' – maisto randama daugiau, ruoškis žiemai.':'.'),'good');}
+  if(si.i===2&&si.left<40)toastT('wwarn','🍂 Netrukus žiema! Prikaupk maisto sandėliuose.','warn',60);}
+function giftStep(dt){if(isWinter()||S.level<2)return;S.giftT=(S.giftT||250)-dt*(hasA('gift')?1.6:1);if(S.giftT>0)return;S.giftT=rnd(280,440);
+  if(items.some(i=>i.multi))return;const cols=[];for(let x=3;x<W-3;x++)if(revealed[x]&&Math.abs(x-40)>3&&!nearRival(x,5))cols.push(x);if(!cols.length)return;
+  const x=cols[(Math.random()*cols.length)|0],t=Math.random()<0.5?'fruit':'dbeetle';
+  items.push({id:S.nextId++,x,z:rndZ(x),t,amt:FOODT[t].amt,need:1,multi:1,mk:true,age:0,ass:[],arr:[]});
+  toast('🎁 Lauke rasta reta dovana – '+FOODT[t].n.toLowerCase()+'! Jį neš daug skruzdžių, daug kartų.','good');}
+function raidStep(dt){const R=S.raid;if(!R||S.level<3)return;
+  if(R.st===0){if(!enemies.some(e=>e.raid))R.t-=dt;if(R.t<=0){R.st=1;R.t=45;toast('⚠ Artėja didelis vorų antpuolis! Paruošk kareives.','warn');}}
+  else if(R.st===1){R.t-=dt;if(R.t<=0){R.st=0;R.t=rnd(540,780);const n=2+Math.min(3,Math.floor(S.level/3)),left=Math.random()<0.5;
+    for(let k=0;k<n;k++)enemies.push({x:left?-20-k*26:WW+20+k*26,y:GY-7,z:Z0+(k-(n-1)/2)*34,hp:60,mhp:60,life:120,leave:false,dir:left?1:-1,ph:k,raid:1,big:1,k,ang:left?0:Math.PI});
+    toast('🕷 Antpuolis prasidėjo! '+n+' dideli vorai puola skruzdėlyną.','warn');alertSoldiers();}}}
+function actOf(a){if(a.st==='trap')return 'Įkliuvo į duobę';if(a.st==='fight')return 'Kovoja';if(a.st==='scout'||a.st==='scoutRest')return 'Žvalgo';
+  const j=a.job;if(j){const m={food:'Neša maistą',carry:'Neša maistą',dig:'Kasa',eat:'Valgo',feedQ:'Maitina karalienę',egg:'Neša kiaušinius',feedL:'Maitina lervas',waste:'Neša atliekas',milk:'Melžia amarus',dirt:'Neša žemes'};if(m[j.k])return m[j.k];}
+  return isNight()&&a.y>=GY?'Ilsisi':(a.t==='s'?'Saugo':'Laisva');}
+function statsPanel(){const T={w:'Darbininkės',s:'Kareivės',c:'Žvalgės'};let h='';
+  const out=ants.filter(onSurface).length,eg=brood.filter(b=>b.st===0).length,si=seasInfo();
+  h+='<div class="qi"><div class="tx">🐜 Iš viso skruzdžių: '+ants.length+' / '+caps.pop+'<small>Lauke: '+out+' · Po žeme: '+(ants.length-out)+' · 🥚 '+eg+' · 🐛 '+(brood.length-eg)+'</small></div></div>';
+  h+='<div class="qi"><div class="tx">🍖 Maistas: '+Math.floor(S.food)+' / '+caps.food+'<small>Surinkta iš viso: '+Math.floor(S.stats.food||0)+' · Dovanų: '+(S.stats.gifts||0)+' · Išnešta atliekų: '+(S.dump||0)+'</small></div></div>';
+  for(const t of ['w','s','c']){const L=ants.filter(a=>a.t===t);if(!L.length&&t!=='w')continue;const m={};L.forEach(a=>{const k=actOf(a);m[k]=(m[k]||0)+1;});
+    h+='<div class="qi"><div class="tx">'+T[t]+': '+L.length+'<small>'+(Object.keys(m).sort((x,y)=>m[y]-m[x]).map(k=>k+' '+m[k]).join(' · ')||'–')+'</small></div></div>';}
+  const rc={};rooms.forEach(r=>{if(r.type)rc[r.type]=(rc[r.type]||0)+1;});
+  h+='<div class="qi"><div class="tx">🏠 Urvai<small>'+(Object.keys(rc).map(k=>ROOMN[k]+' '+rc[k]).join(' · ')||'–')+'</small></div></div>';
+  h+='<div class="qi"><div class="tx">'+SEAS[si.i].ic+' '+SEAS[si.i].n+' · '+bio().ic+' '+bio().n+'<small>Iki kito sezono: '+fmtT(si.left)+' · Užimtų teritorijų: '+(S.stats.terr||0)+' · Nugalėta priešų: '+(S.stats.kills||0)+'</small></div></div>';
+  sheet('<h3>📊 Statistika</h3><div class="ql">'+h+'</div><div class="opts"><button class="plain" data-a="x">Uždaryti</button></div>');}
+function fmtT(s){s=Math.max(0,Math.ceil(s));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');}
 const EGG_T=20, LARVA_T=30, LAY_T=7;
 
 function layerOf(gy){for(let i=3;i>=0;i--) if(gy>=LAYERS[i].from) return i; return 0;}
@@ -33,7 +115,7 @@ let queen={x:0,y:0,phase:0};
 
 function newGame(){
   S={seed:(Math.random()*1e9)|0,food:40,t:0,level:1,prod:'w',nextId:1,layT:0,spawnT:2,starve:0,
-     weather:{phase:'clear',t:200+Math.random()*120},enemyT:150,birdT:240,tut:0,hints:{}};
+     weather:{phase:'clear',t:200+Math.random()*120},enemyT:150,birdT:240,tut:0,hints:{},sOff:0};
   dug=new Uint8Array(W*ROWS); room=new Uint8Array(W*ROWS); queued=new Uint8Array(W*ROWS); digProg=new Float32Array(W*ROWS);
   revealed=new Uint8Array(W);
   for(let x=0;x<W;x++){dug[idx(x,0)]=1; if(Math.abs(x-40)<=11)revealed[x]=1;}
@@ -48,16 +130,16 @@ function newGame(){
 }
 function cx(gx){return gx*C+C/2}
 function cy(gy){return GY+gy*C+C/2}
-function addAnt(t,x,y){const a={id:S.nextId++,t,x,y,hp:ANT[t].hp,path:[],st:'idle',wait:rnd(0,2),job:null,carry:0,ct:null,phase:Math.random()*6,ang:Math.random()*6,ox:rnd(-4,4),oy:rnd(-4,4),hun:rnd(0,0.4),ld:null,fd:1};ants.push(a);return a;}
+function addAnt(t,x,y){const a={id:S.nextId++,t,x,y,z:Z0,tz:null,hp:ANT[t].hp,path:[],st:'idle',wait:rnd(0,2),job:null,carry:0,ct:null,phase:Math.random()*6,ang:Math.random()*6,ox:rnd(-4,4),oy:rnd(-4,4),hun:rnd(0,0.4),ld:null,fd:1};ants.push(a);return a;}
 
 function afterLoad(){
   queued.fill(0);digProg.fill(0);if(S.queue)S.queue.forEach(i=>queued[i]=1);
   rebuildDugList(); migrate(); rebuildRooms(); buildSoil(); rv=[]; digTaken.clear();
   const q=rooms.find(r=>r.type===1); if(q){queen.x=q.cx;queen.y=q.cy+2;}
-  items.forEach(it=>{it.ass=[];it.arr=[];});pits=[];liz=null;wasp=null;
+  items.forEach(it=>{it.ass=[];it.arr=[];if(it.z===undefined)it.z=rndZ(it.x);});pits=[];liz=null;wasp=null;buildSurf();
   brood.forEach(b=>{b.held=0;b.fj=0;b.cr=0;if(b.pl===undefined)b.pl=1;if(b.fed===undefined)b.fed=1;if(!b.id)b.id=S.nextId++;});
-  S.qj=0;S.wst.forEach(w=>{w.h=0;w.cr=0;});S.pl.forEach(p=>p.j=0);
-  ants.forEach(a=>{a.path=[];a.st='idle';a.job=null;a.ld=null;a.fd=a.fd||1;if(a.hun===undefined)a.hun=rnd(0,0.5);a.wait=rnd(0,1);const c=cellAt(a.x,a.y); if(!dug[c]){const h=randomHomeCell(); a.x=cxi(h);a.y=cyi(h);}
+  S.qj=0;S.wst.forEach(w=>{w.h=0;w.cr=0;if(w.z===undefined)w.z=Z0+20;});S.pl.forEach(p=>p.j=0);
+  ants.forEach(a=>{a.path=[];a.st='idle';a.job=null;a.ld=null;a.tz=null;a.fd=a.fd||1;if(a.z===undefined||a.z===null)a.z=entZ(nearestEntrance(Math.floor(a.x/C)));if(a.hun===undefined)a.hun=rnd(0,0.5);a.wait=rnd(0,1);const c=cellAt(a.x,a.y); if(!dug[c]){const h=randomHomeCell(); a.x=cxi(h);a.y=cyi(h);}
     if(a.carry>0){const h=cellAt(a.x,a.y);a.job={k:'carry',big:false};a.st='carry';
       a.path=bfs(h,c=>room[c]===2,false)||bfs(h,c=>room[c]===1,false)||[];}else{a.carry=0;a.ct=null;} });
 }
@@ -72,7 +154,7 @@ function rebuildRooms(){
     let best=cells[0],bd=1e9;cells.forEach(c=>{const d=(cxi(c)-r.cx)**2+(cyi(c)-r.cy)**2;if(d<bd){bd=d;best=c;}});
     r.cx=cxi(best);r.cy=cyi(best);rooms.push(r);}
   let nS=0,nN=0,nR=0;for(let i=W;i<W*ROWS;i++){if(room[i]===2)nS++;else if(room[i]===3)nN++;else if(room[i]===4)nR++;}
-  caps.food=60+nS*5+30*upL('sto'); caps.nurs=2+Math.floor(nN/4); caps.pop=6+Math.floor(nR/2);
+  caps.food=60+nS*5+30*upL('sto')+(S.ach&&S.ach.food?60:0)+50*((S.stats&&S.stats.terr)||0); caps.nurs=2+Math.floor(nN/4); caps.pop=6+Math.floor(nR/2);
 }
 function nb4(i){const x=gxOf(i),r=[];if(x>0)r.push(i-1);if(x<W-1)r.push(i+1);if(i>=W)r.push(i-W);if(i<W*(ROWS-1))r.push(i+W);return r;}
 function cxi(i){return gxOf(i)*C+C/2}
@@ -97,7 +179,7 @@ function bfs(start,goal,noSurf,maxN){
   return null;
 }
 function randomHomeCell(){ // a cell inside a room or any dug underground
-  const rr2=rooms.filter(r=>r.type!==6&&r.type!==5);const pool=rr2.length?rr2[(Math.random()*rr2.length)|0].cells:dugList;
+  const rr2=rooms.filter(r=>r.type!==5);const pool=rr2.length?rr2[(Math.random()*rr2.length)|0].cells:dugList;
   return pool[(Math.random()*pool.length)|0]||dugList[0];
 }
 
@@ -154,15 +236,19 @@ function drawTreasure(g,x,y,L){
 }
 
 // ===== Food =====
+function rndZ(x){for(let k=0;k<8;k++){const z=rnd(60,SZ-60);if(Math.abs(x-40)<4&&Math.abs(z-Z0)<70)continue;if(Math.abs(x-TRX)<3&&Math.abs(z-TRZ)<50)continue;return z;}return Z0+200;}
+function pickFood(){const L=bio().food;let r=Math.random(),t=L[L.length-1][0];for(const [k,p] of L){if(r<p){t=k;break;}r-=p;}
+  if(FOODT[t].need>1&&S.level<2)t=L.find(q=>FOODT[q[0]].need===1)[0];return t;}
 function spawnFood(nearOnly){
-  const maxI=Math.min(12,4+ants.filter(a=>a.t==='c').length+Math.floor(S.level/2));
+  if(isWinter())return;
+  const maxI=Math.min(16,4+ants.filter(a=>a.t==='c').length+Math.floor(S.level/2)+2*((S.stats&&S.stats.terr)||0));
   const vis=items.filter(i=>revealed[i.x]).length,hid=items.length-vis;
   let near=nearOnly||Math.random()<0.6;if(near&&vis>=maxI)near=false;if(!near&&hid>=6)near=true;if(near&&vis>=maxI)return;
   let x;if(near){const rv=[];for(let i=2;i<W-2;i++)if(revealed[i])rv.push(i);x=rv[(Math.random()*rv.length)|0];}
   else x=2+((Math.random()*(W-4))|0);
   if(items.some(it=>Math.abs(it.x-x)<2)||Math.abs(x-40)<2||nearRival(x,4)||(S.pl||[]).some(p=>Math.abs(p.x-x)<1))return;
-  const r=Math.random();let t=r<0.4?'crumb':r<0.7?'seed':r<0.9?'berry':'beetle';if(t==='beetle'&&S.level<2)t='berry';
-  items.push({id:S.nextId++,x,t,amt:FOODT[t].amt,need:FOODT[t].need,mk:false,age:0,ass:[],arr:[]});
+  const t=pickFood();
+  items.push({id:S.nextId++,x,z:rndZ(x),t,amt:FOODT[t].amt,need:FOODT[t].need,mk:false,age:0,ass:[],arr:[]});
 }
 
 // ===== Helpers =====
@@ -179,30 +265,30 @@ function abortJob(a){
     if(j.k==='egg'){const b=brood.find(x=>x.id===j.id);if(b&&b.held===a.id){b.held=0;if(b.cr){b.cr=0;b.x=a.x;b.y=a.y;}}}
     if(j.k==='feedL'){const b=brood.find(x=>x.id===j.id);if(b)b.fj=0;}
     if(j.k==='feedQ'){S.qj=0;}
-    if(j.k==='waste'){const w=S.wst.find(x=>x.id===j.id);if(w){w.h=0;if(w.cr){w.cr=0;w.x=a.x;w.y=onSurface(a)?GY-4:a.y;}}}
+    if(j.k==='waste'){const w=S.wst.find(x=>x.id===j.id);if(w){w.h=0;if(w.cr){w.cr=0;w.x=a.x;w.y=onSurface(a)?GY-4:a.y;w.z=a.z;}}}
     if(j.k==='milk'){const p=S.pl.find(q=>q.x===j.x);if(p)p.j=0;}
-    if(j.k==='dirt'&&a.ld==='dirt'&&onSurface(a)){const d=dropAt(nearestEntrance(Math.floor(a.x/C)));S.mounds[d]=(S.mounds[d]||0)+1;}
+    if(j.k==='dirt'&&a.ld==='dirt'&&onSurface(a)){S.trashD=(S.trashD||0)+1;}
     if(a.ld)a.ld=null;}
   a.job=null;
 }
 function goHome(a){abortJob(a);const p=bfs(cellAt(a.x,a.y),c=>c>=2*W&&dug[c]&&!queued[c],false);a.path=p||[];a.st='home';}
-function digMult(){return 1+0.25*Math.max(0,S.level-3);}
+function digMult(){return (1+0.25*Math.max(0,S.level-3))*(hasA('dig')?1.3:1);}
 function popNow(){return ants.length;}
 
 // ===== AI =====
 function assign(a){
-  const here=cellAt(a.x,a.y),danger=surfDanger(),night=isNight(),sur=onSurface(a);
+  const here=cellAt(a.x,a.y),danger=surfDanger(),night=isNight(),sur=onSurface(a);a.tz=null;
   if(a.carry>0){const p=pathStore(here);if(p){a.job={k:'carry',big:false};a.path=p;a.st='carry';return;}}
   if(a.hun>0.75&&S.food>=0.5){const p=pathStore(here);if(p){goJob(a,'eat',p);return;}}
   if(a.t==='w'){
     if(S.qh>0.6&&!S.qj&&S.food>=2){const p=pathStore(here);if(p){S.qj=a.id;goJob(a,'feedQ',p);return;}}
     if(rooms.some(r=>r.type===3)){const b=brood.find(b=>!b.pl&&!b.held);if(b){const t=cellAt(b.x,b.y);const p=bfs(here,c=>c===t,false);if(p){b.held=a.id;goJob(a,'egg',p,{id:b.id});return;}}}
     if(S.food>=1){const b=brood.find(b=>b.st===1&&b.fed<0.6&&!b.fj&&!b.cr);if(b){const p=pathStore(here);if(p){b.fj=a.id;goJob(a,'feedL',p,{id:b.id});return;}}}
-    if(rooms.some(r=>r.type===6)){let w=null,bd=1e9;for(const x of S.wst){if(x.h)continue;if(x.y<GY&&(danger||night))continue;const d=Math.abs(x.x-a.x)+Math.abs(x.y-a.y);if(d<bd){bd=d;w=x;}}
+    if(!danger&&!night){let w=null,bd=1e9;for(const x of S.wst){if(x.h)continue;const d=Math.abs(x.x-a.x)+Math.abs(x.y-a.y);if(d<bd){bd=d;w=x;}}
       if(w){const t=cellAt(w.x,w.y);const p=bfs(here,c=>c===t,false);if(p){w.h=a.id;goJob(a,'waste',p,{id:w.id});return;}}}
     if(!danger&&S.food<caps.food-2){
-      let best=null,bd=1e9;for(const it of items){if(!revealed[it.x]||it.rv||it.ass.length>=it.need)continue;if(night&&!it.mk)continue;
-        if(!it.mk&&it.need>1&&wkFree()<it.need)continue;
+      let best=null,bd=1e9;for(const it of items){if(!revealed[it.x]||it.rv||it.ass.length>=(it.multi?6:it.need))continue;if(night&&!it.mk)continue;
+        if(!it.multi&&!it.mk&&it.need>1&&wkFree()<it.need)continue;
         const d=Math.abs(it.x-gxOf(here))+rowOf(here)*1.5-(it.mk?1000:0);if(d<bd){bd=d;best=it;}}
       if(best){const tgt=idx(best.x,0);const p=bfs(here,c=>c===tgt,false);
         if(p){best.ass.push(a.id);a.job={k:'food',id:best.id};a.path=p;a.st='toFood';return;}}
@@ -214,7 +300,7 @@ function assign(a){
   }
   if(a.t==='s'){
     const T=threatX(a);
-    if(T!==null&&S.weather.phase!=='rain'){const tgt=cellAt(T,GY-6);const p=bfs(here,c=>c===tgt,false);if(p){a.path=p;a.st='fight';a.wait=1;return;}}
+    if(T!==null&&(S.weather.phase!=='rain'||enemies.some(e=>e.raid))){const tz=lastTZ,tgt=cellAt(T,GY-6);const p=bfs(here,c=>c===tgt,false);if(p){a.path=p;a.st='fight';a.wait=1;a.tz=tz;return;}}
     const pool=guardCells();const t=pool[(Math.random()*pool.length)|0];const p=bfs(here,c=>c===t,!sur)||bfs(here,c=>c===t,false);
     a.path=p||[];a.st='idle';a.wait=rnd(2,5);return;
   }
@@ -222,7 +308,7 @@ function assign(a){
     const gx=gxOf(here);let tx=-1;
     for(let d=0;d<W;d++){if(gx-d>=1&&!revealed[gx-d]){tx=gx-d;break;}if(gx+d<W-1&&!revealed[gx+d]){tx=gx+d;break;}}
     if(tx<0)tx=2+((Math.random()*(W-4))|0);
-    const tgt=idx(tx,0);const p=bfs(here,c=>c===tgt,false);if(p){a.path=p;a.st='scout';return;}
+    const tgt=idx(tx,0);const p=bfs(here,c=>c===tgt,false);if(p){a.path=p;a.st='scout';a.tz=rnd(60,SZ-60);return;}
   }
   let tgt=-1;const rest=night?roomCells(4):[];
   if(rest.length)tgt=rest[(Math.random()*rest.length)|0];
@@ -236,8 +322,23 @@ function layerOk(i){return LAYERS[layerOf(rowOf(i)-1)].lvl<=S.level;}
 function updAnt(a,dt){
   if(a.st==='trap'){trapStep(a,dt);return;}
   if(a.path.length){
+    let sp0=ANT[a.t].spd*C*dt*spdM()*(S.sick?0.9:1);if(a.carry&&a.job&&a.job.big)sp0*=0.6;
+    if(a.y<GY-0.5){ // paviršiuje: judam laisvai pievoje (x ir z)
+      const t0=a.path[0];let k=-1,tx,tz;
+      if(t0<W){k=0;while(k+1<a.path.length&&a.path[k+1]<W)k++;const T=a.path[k];tx=cxi(T);tz=(k+1<a.path.length)?entZ(gxOf(T)):surfTZ(a);}
+      else{tx=cxi(t0);tz=entZ(gxOf(t0));}
+      const dx=tx-a.x,dz=tz-a.z,d=Math.hypot(dx,dz);
+      if(d>0.5||k>=0){
+        if(Math.abs(dx)>0.3)a.fd=dx>0?1:-1;
+        if(d>0.1){const ta=Math.atan2(dz,dx);let da=ta-a.ang;while(da>Math.PI)da-=6.283;while(da<-Math.PI)da+=6.283;a.ang+=da*Math.min(1,dt*12);}
+        if(d<=sp0){a.x=tx;a.z=tz;if(k>=0){a.path.splice(0,k+1);a.y=GY-6;}}else{a.x+=dx/d*sp0;a.z+=dz/d*sp0;}
+        a.phase+=sp0*0.7;
+        if(a.st==='scout'){const gx=Math.floor(a.x/C);for(let q=-5;q<=5;q++){const x=gx+q;if(x>=0&&x<W&&!revealed[x]){revealed[x]=1;}}}
+        if(a.st==='fight'){a.wait-=dt;if(a.wait<0)a.path=[];}
+        return;}
+    }
     const t=a.path[0];const sur=t<W;const tx=cxi(t)+(sur?0:a.ox),ty=cyi(t)+(sur?0:a.oy);
-    const dx=tx-a.x,dy=ty-a.y,d=Math.hypot(dx,dy);let sp=ANT[a.t].spd*C*dt*spdM()*(S.sick?0.9:1);if(a.carry&&a.job&&a.job.big)sp*=0.6;
+    const dx=tx-a.x,dy=ty-a.y,d=Math.hypot(dx,dy);let sp=sp0;if(a.y>=GY)a.z=entZ(gxOf(cellAt(a.x,a.y)));
     if(Math.abs(dx)>0.3)a.fd=dx>0?1:-1;if(d<=sp){a.x=tx;a.y=ty;a.path.shift();}else{a.x+=dx/d*sp;a.y+=dy/d*sp;}
     if(d>0.1){const ta=Math.atan2(dy,dx);let da=ta-a.ang;while(da>Math.PI)da-=6.283;while(da<-Math.PI)da+=6.283;a.ang+=da*Math.min(1,dt*12);}
     a.phase+=sp*0.7;
@@ -248,6 +349,9 @@ function updAnt(a,dt){
   // arrived
   switch(a.st){
     case 'toFood':{const it=items.find(i=>i.id===a.job.id);if(!it){a.job=null;a.st='idle';a.wait=0;break;}
+      if(it.multi){const tk=Math.min(5,it.amt);it.amt-=tk;it.ass=it.ass.filter(x=>x!==a.id);a.carry=tk;a.ct=it.t;a.job={k:'carry',big:false};
+        a.path=bfs(cellAt(a.x,a.y),c=>room[c]===2,false)||bfs(cellAt(a.x,a.y),c=>room[c]===1,false)||[];a.st='carry';
+        if(it.amt<=0.01){items.splice(items.indexOf(it),1);S.stats.gifts=(S.stats.gifts||0)+1;toast('🎁 '+FOODT[it.t].n+' visas parneštas į skruzdėlyną!','good');}break;}
       if(!it.arr.includes(a.id))it.arr.push(a.id);a.st='waitFood';a.wait=0;break;}
     case 'waitFood':{const it=items.find(i=>i.id===(a.job&&a.job.id));if(!it){a.job=null;a.st='idle';break;}
       a.phase+=dt*3;
@@ -261,7 +365,7 @@ function updAnt(a,dt){
       a.carry=0;a.ct=null;a.job=null;a.st='idle';a.wait=0.3;break;}
     case 'toDig':a.st='digging';break;
     case 'digging':{const c=a.job.c;if(!queued[c]){abortJob(a);a.st='idle';break;}
-      const L=layerOf(rowOf(c)-1);digProg[c]+=dt*digMult()*(1+0.2*upL('dig'))/LAYERS[L].hard;a.phase+=dt*8;
+      const L=layerOf(rowOf(c)-1);S.stats.digT=1;digProg[c]+=dt*digMult()*(1+0.2*upL('dig'))/LAYERS[L].hard;a.phase+=dt*8;
       const dx=cxi(c)-a.x,dy=cyi(c)-a.y;a.ang=Math.atan2(dy,dx);
       if(Math.random()<dt*6)parts.push({x:a.x+dx*0.6,y:a.y+dy*0.6,vx:rnd(-20,20),vy:rnd(-30,0),l:0.5,c:LAYERS[L].peb});
       if(digProg[c]>=1){completeDig(c);abortJob(a);a.st='idle';a.wait=0;a.dn=(a.dn||0)+1;if(a.dn>=2){a.dn=0;startDirt(a);}}
@@ -275,7 +379,7 @@ function updAnt(a,dt){
   }
 }
 function completeDig(c){
-  dug[c]=1;queued[c]=0;digProg[c]=0;digTaken.delete(c);dugList.push(c);
+  dug[c]=1;queued[c]=0;digProg[c]=0;digTaken.delete(c);dugList.push(c);if(S.stats)S.stats.digs=(S.stats.digs||0)+1;
   const gx=gxOf(c),gy=rowOf(c)-1;const t=treasureAt(gx,gy);
   if(t){const add=Math.min(t,caps.food-S.food);S.food+=Math.max(0,add);
     toast((gy>=80?'💎 Gelmių medus':gy>=50?'🍄 Grybas':'🌰 Sėkla')+' +'+t+' maisto!','good');fx.push({x:cxi(c),y:cyi(c),txt:'+'+t,l:1.5});}
@@ -289,12 +393,14 @@ let parts=[],fx=[];
 function step(dt){
   S.t+=dt;
   // alkis (kiekviena skruzdė valgo pati), atliekos, diena/naktis
-  hungerStep(dt);wasteStep(dt);dayStep();plantStep(dt);flightStep(dt);if(S.food<0)S.food=0;
+  hungerStep(dt);wasteStep(dt);dayStep();plantStep(dt);flightStep(dt);seasonStep();giftStep(dt);raidStep(dt);if(S.food<0)S.food=0;
+  S.achT=(S.achT||0)+dt;if(S.achT>1){S.achT=0;achStep();}
   // queen lays
   S.layT+=dt;
   if(S.layT>=LAY_T){S.layT=0;const t=S.prod;
     if(t!=='p'&&ANT[t].lvl<=S.level&&S.qh<=1.2){
       if(layEgg(false)){}
+      else if(t==='s'&&!hasBarr())toastT('nobarr','🛡 Kareivėms reikia kareivinių – iškask urvą ir paskirk jį „Kareivinės“.','warn',30);
       else if(brood.length>=caps.nurs)hintOnce('nurs','Peryklė pilna – iškask urvą ir paskirk jį „Peryklė“, kad karalienė dėtų daugiau kiaušinių.');
       else if(ants.length+brood.length>=caps.pop)hintOnce('pop','Pasiekta skruzdžių riba – iškask urvą ir paskirk jį „Poilsis“.');
     }}
@@ -307,8 +413,10 @@ function step(dt){
   let L=1;for(let i=0;i<LVL_THR.length;i++)if(ants.length>=LVL_THR[i])L=i+1;
   if(L>S.level){S.level=L;levelUp(L);}
   // food spawn
-  S.spawnT-=dt;if(S.spawnT<=0){S.spawnT=rnd(4,7);spawnFood(false);}
-  for(let i=items.length-1;i>=0;i--){const it=items[i];it.age+=dt;if(it.age>(revealed[it.x]?300:150)&&!it.mk&&!it.ass.length)items.splice(i,1);}
+  S.spawnT-=dt;if(S.spawnT<=0){S.spawnT=seasInfo().i===2?rnd(2.5,4.5):rnd(4,7);spawnFood(false);}
+  for(let i=items.length-1;i>=0;i--){const it=items[i];it.age+=dt;if(it.age>(revealed[it.x]?300:150)&&!it.mk&&!it.ass.length)items.splice(i,1);
+    else if(it.multi&&it.age>600&&!it.ass.length){items.splice(i,1);toast('Dovana sunyko – nespėjote visos parnešti.','warn');}}
+  for(const f of fx)if(f.z===undefined){f.z=f.y<GY?(f.sz||Z0-20):null;f.y0=f.y;}
   weather(dt);enemiesStep(dt);rivalStep(dt);newEnemies(dt);
   for(const a of ants)updAnt(a,dt);
   // regen
@@ -317,7 +425,7 @@ function step(dt){
   for(let i=parts.length-1;i>=0;i--){const p=parts[i];p.l-=dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=80*dt;if(p.l<=0)parts.splice(i,1);}
   for(let i=fx.length-1;i>=0;i--){fx[i].l-=dt;fx[i].y-=15*dt;if(fx[i].l<=0)fx.splice(i,1);}
 }
-function layEgg(off){const t=S.prod;if(t==='p'||ANT[t].lvl>S.level)return false;const cost=ANT[t].cost;
+function layEgg(off){const t=S.prod;if(t==='p'||ANT[t].lvl>S.level||(t==='s'&&!hasBarr()))return false;const cost=ANT[t].cost;
   if(!(S.food>=cost+(off?6:1)&&brood.length<caps.nurs&&ants.length+brood.length<caps.pop))return false;
   S.food-=cost;const hasN=rooms.some(r=>r.type===3);
   if(off&&hasN){const c=nurseryCell();brood.push({id:S.nextId++,t,st:0,tm:0,x:cxi(c)+rnd(-4,4),y:cyi(c)+rnd(-2,4),pl:1,fed:1,held:0,fj:0,cr:0});return true;}
@@ -327,12 +435,12 @@ function hintOnce(k,m){if(S.hints[k])return;S.hints[k]=1;toast(m);}
 function levelUp(L){const u={2:'Atrakinta: Kareivės ir Molio sluoksnis!',3:'Atrakinta: Žvalgės!',4:'Atrakinta: Akmens sluoksnis, kasimas greitesnis!',5:'Kasimas dar greitesnis!',6:'Atrakinta: Gelmės su retu maistu!'};
   toast('⭐ Lygis '+L+'! '+(u[L]||'Kasimas greitesnis!'),'good');updateProdButtons();}
 function killAnt(a,corpse){abortJob(a);const i=ants.indexOf(a);if(i>=0)ants.splice(i,1);
-  if(corpse)addWaste(a.x,onSurface(a)?GY-4:a.y,'dead');
+  if(corpse)addWaste(a.x,onSurface(a)?GY-4:a.y,'dead',a.z);
   if(bird&&bird.tid===a.id)bird=null;}
 
 function weather(dt){const w=S.weather;w.t-=dt;
   if(w.phase==='clear'&&w.t<=0){w.phase='clouds';w.t=15;toast('☁ Artėja lietus! Skruzdės greitai slėpsis.','warn');}
-  else if(w.phase==='clouds'&&w.t<=0){w.phase='rain';w.t=30;enemies.forEach(e=>e.leave=true);
+  else if(w.phase==='clouds'&&w.t<=0){w.phase='rain';w.t=30;enemies.forEach(e=>{if(!e.raid)e.leave=true;});
     ants.forEach(a=>{if(onSurface(a)||(a.job&&a.job.k==='food'))goHome(a);});}
   else if(w.phase==='rain'&&w.t<=0){w.phase='clear';w.t=rnd(240,420);toast('☀ Lietus baigėsi – darbai paviršiuje tęsiasi.','good');}
   const el=document.getElementById('weather');const txt=w.phase==='clouds'?'☁ Artėja lietus ('+Math.ceil(w.t)+' s)':w.phase==='rain'?'🌧 Lyja – darbai paviršiuje sustabdyti ('+Math.ceil(w.t)+' s)':'';
@@ -340,30 +448,36 @@ function weather(dt){const w=S.weather;w.t-=dt;
 }
 function enemiesStep(dt){
   const rain=S.weather.phase==='rain';
-  if(S.level>=2&&!rain&&!enemies.length){S.enemyT-=dt*(isNight()?2:1);if(S.enemyT<=0){S.enemyT=rnd(140,240);
-    const left=Math.random()<0.5;enemies.push({x:left?-10:WW+10,y:GY-7,hp:40,life:40,leave:false,dir:left?1:-1,ph:0});
+  if(S.level>=2&&!rain&&!enemies.length){S.enemyT-=dt*(isNight()?2:1)*BE('sp');if(S.enemyT<=0){S.enemyT=rnd(140,240);
+    const left=Math.random()<0.5;enemies.push({x:left?-10:WW+10,y:GY-7,z:rnd(80,SZ-80),hp:40,mhp:40,life:40,leave:false,dir:left?1:-1,ph:0,ang:left?0:Math.PI});
     toast('🕷 Voras paviršiuje! Skruzdės slepiasi, kareivės gina.','warn');
     ants.forEach(a=>{if(a.t!=='s'&&(onSurface(a)||(a.job&&a.job.k==='food')))goHome(a);});
     alertSoldiers();}}
+  const ex0=40*C+C/2;
   for(let i=enemies.length-1;i>=0;i--){const e=enemies[i];e.life-=dt;e.ph+=dt*10;if(e.life<=0)e.leave=true;
-    let tgt=null,td=1e9;if(!e.leave)for(const a of ants){if(!onSurface(a))continue;const d=Math.abs(a.x-e.x);if(d<td){td=d;tgt=a;}}
-    let vx;if(e.leave)vx=(e.x<WW/2?-1:1)*40;else if(tgt)vx=Math.sign(tgt.x-e.x)*(td>6?30:0);else vx=Math.sign(40*C-e.x)*20*(Math.abs(40*C-e.x)>60?1:0);
-    e.x+=vx*dt;if(vx)e.dir=Math.sign(vx);
-    if(tgt&&td<10){tgt.hp-=(tgt.t==='s'?3:5)*dt*(isNight()?1.5:1);if(tgt.hp<=0){killAnt(tgt,true);toast('Voras sugavo skruzdę!','warn');}}
-    for(const a of ants)if(a.t==='s'&&onSurface(a)&&Math.abs(a.x-e.x)<16){e.hp-=8*dt*solM();}
+    let tgt=null,td=1e9;if(!e.leave)for(const a of ants){if(!onSurface(a))continue;const d=Math.hypot(a.x-e.x,a.z-e.z);if(d<td&&(!e.raid||d<220)){td=d;tgt=a;}}
+    let tx,tz,spd=e.raid?34:30;
+    if(e.leave){tx=e.x<WW/2?-60:WW+60;tz=e.z;spd=45;}else if(tgt){tx=tgt.x;tz=tgt.z;}else if(e.raid){tx=ex0+(e.k||0)*14-14;tz=Z0+((e.k||0)%2?14:-14);}else{tx=ex0;tz=Z0;}
+    const dx=tx-e.x,dz=tz-e.z,dd=Math.hypot(dx,dz);
+    if(dd>(tgt?6:4)){const m=Math.min(dd,spd*dt);e.x+=dx/dd*m;e.z+=dz/dd*m;e.ang=Math.atan2(dz,dx);if(Math.abs(dx)>0.5)e.dir=Math.sign(dx);}
+    if(tgt&&td<10){tgt.hp-=(tgt.t==='s'?3:5)*dt*(isNight()?1.5:1)*(e.raid?1.4:1);if(tgt.hp<=0){killAnt(tgt,true);toast('Voras sugavo skruzdę!','warn');}}
+    if(e.raid&&!tgt&&!e.leave&&Math.hypot(e.x-ex0,e.z-Z0)<40){const s2=Math.min(S.food,2*dt);S.food-=s2;e.stole=(e.stole||0)+s2;if(s2>0)toastT('rsteal','⚠ Antpuolio vorai vagia maistą prie įėjimo! Reikia kareivių.','warn',8);}
+    for(const a of ants)if(a.t==='s'&&onSurface(a)&&Math.hypot(a.x-e.x,a.z-e.z)<(e.raid?24:18)){e.hp-=8*dt*solM();}
     if(e.hp<=0){enemies.splice(i,1);const gx=Math.max(2,Math.min(W-3,Math.floor(e.x/C)));
-      items.push({id:S.nextId++,x:gx,t:'spider',amt:24,need:2,mk:true,age:0,ass:[],arr:[]});revealed[gx]=1;
-      S.stats.spiders++;toast('⚔ Kareivės nugalėjo vorą! Jis tapo maistu.','good');continue;}
-    if(e.leave&&(e.x<-20||e.x>WW+20)){enemies.splice(i,1);toastT('sleft','Voras pasitraukė.','',5);}
+      items.push({id:S.nextId++,x:gx,z:Math.max(40,Math.min(SZ-40,e.z)),t:'spider',amt:24,need:2,mk:true,age:0,ass:[],arr:[]});revealed[gx]=1;
+      S.stats.spiders++;S.stats.kills++;
+      if(e.raid){if(!enemies.some(q=>q.raid)){S.stats.raids++;const rw=40+10*S.level;S.food+=rw;toast('🏆 Didelis antpuolis atremtas! +'+rw+' maisto.','good');save();}}
+      else toast('⚔ Kareivės nugalėjo vorą! Jis tapo maistu.','good');continue;}
+    if(e.leave&&(e.x<-40||e.x>WW+40)){enemies.splice(i,1);if(e.raid){if(!enemies.some(q=>q.raid))toast('Antpuolio vorai pasitraukė.','');}else toastT('sleft','Voras pasitraukė.','',5);}
   }
   // bird
-  if(S.level>=3&&!rain&&!bird&&!isNight()){S.birdT-=dt;if(S.birdT<=0){S.birdT=rnd(150,260);
+  if(S.level>=3&&!rain&&!bird&&!isNight()){S.birdT-=dt*BE('bird');if(S.birdT<=0){S.birdT=rnd(150,260);
     const cand=ants.filter(a=>onSurface(a)&&a.t!=='s');if(cand.length){const t=cand[(Math.random()*cand.length)|0];
-      bird={tid:t.id,t:4,x:t.x};toast('🐦 Paukštis! Slėpkitės!','warn');alertSoldiers();
+      bird={tid:t.id,t:4,x:t.x,z:t.z};toast('🐦 Paukštis! Slėpkitės!','warn');alertSoldiers();
       ants.forEach(a=>{if(a.t!=='s'&&(onSurface(a)||(a.job&&a.job.k==='food')))goHome(a);});}}}
-  if(bird){const t=ants.find(a=>a.id===bird.tid);bird.t-=dt;if(t)bird.x+=(t.x-bird.x)*Math.min(1,dt*3);
+  if(bird){const t=ants.find(a=>a.id===bird.tid);bird.t-=dt;if(t){bird.x+=(t.x-bird.x)*Math.min(1,dt*3);bird.z+=(t.z-bird.z)*Math.min(1,dt*3);}
     if(bird.t<=0){if(t&&onSurface(t)){const guard=ants.some(a=>a.t==='s'&&onSurface(a)&&Math.abs(a.x-t.x)<5*C);
-        if(guard)toast('⚔ Kareivės nubaidė paukštį!','good');else{killAnt(t);toast('Paukštis pagavo skruzdę!','warn');}}
+        if(guard){toast('⚔ Kareivės nubaidė paukštį!','good');S.stats.kills++;}else{killAnt(t);toast('Paukštis pagavo skruzdę!','warn');}}
       bird=null;}}
 }
 
@@ -378,11 +492,11 @@ const UPG={dig:{n:'⛏ Greitesnis kasimas',d:'+20% kasimo greičio',b:40},
 const UPMAX=5;
 function upL(k){return (S.up&&S.up[k])||0}
 function upCost(k){return Math.round(UPG[k].b*Math.pow(1.7,upL(k))/5)*5}
-function solM(){return 1+0.25*upL('sol')}
-function spdM(){return 1+0.1*upL('spd')}
-function eatM(){return 1-0.08*upL('eat')}
+function solM(){return (1+0.25*upL('sol'))*(hasA('raid')?1.2:1)}
+function spdM(){return (1+0.1*upL('spd'))*(hasA('terr')?1.1:1)}
+function eatM(){return (1-0.08*upL('eat'))*(hasA('win')&&isWinter()?0.8:1)}
 function brdM(){return 1-0.1*upL('brd')}
-function maxHp(a){return ANT[a.t].hp*(a.t==='s'?solM():1)}
+function maxHp(a){return ANT[a.t].hp*(a.t==='s'?solM()*(hasA('kill')?1.25:1):1)}
 const nSto=()=>rooms.filter(r=>r.type===2).length;
 const QUESTS=[
  {id:'a8',n:'Užaugink 8 skruzdes',g:()=>ants.length,N:8,r:{f:30}},
@@ -400,7 +514,7 @@ const QUESTS=[
  {id:'deep',n:'Pasiek gelmes',g:()=>S.stats.depth,N:80,r:{f:250}},
  {id:'a60',n:'Užaugink 60 skruzdžių',g:()=>ants.length,N:60,r:{f:300,u:'brd'}},
  {id:'brk',n:'Paskirk kareivines',g:()=>rooms.filter(r=>r.type===5).length,N:1,r:{f:40}},
- {id:'wch',n:'Paskirk atliekų kamerą',g:()=>rooms.filter(r=>r.type===6).length,N:1,r:{f:40}},
+ {id:'wch2',n:'Išnešk 20 atliekų į šiukšlyną',g:()=>S.dump||0,N:20,r:{f:40}},
  {id:'hon',n:'Surink 50 lipčiaus iš amarų',g:()=>S.stats.honey||0,N:50,r:{f:60}},
  {id:'mnd',n:'Išnešk 30 žemių krūvelių',g:()=>S.stats.dirt||0,N:30,r:{f:40}}];
 function migrate(){
@@ -413,7 +527,17 @@ function migrate(){
   S.wst=S.wst||[];S.mounds=S.mounds||{};S.qh=S.qh||0;S.dump=S.dump||0;S.scrap=S.scrap||0;
   S.pl=S.pl||[{x:33,h:1},{x:47,h:1},{x:24,h:0},{x:57,h:0}];
   S.cid=S.cid||1;S.cname=S.cname||('Kolonija '+S.cid);
-  S.ver=3;}
+  // v4: atliekų kameros nebelieka – paverčiam paprastu (nepaskirtu) urvu, niekas nedingsta
+  if(room)for(let i=0;i<room.length;i++)if(room[i]===6)room[i]=0;
+  S.stats=Object.assign({digs:dugList.length,kills:(S.stats.spiders||0)+(S.stats.pits||0)+(S.stats.liz||0)+(S.stats.wasp||0),winters:0,raids:0,gifts:0,terr:0},S.stats);
+  [S.rival,S.fire].forEach(R=>{if(R.st===2){R.st=3;R.atk=0;}});
+  S.stats.terr=[S.rival,S.fire].filter(R=>R.st===3).length;
+  if(!S.biome)S.biome=BIO_ORD[((S.cid||1)-1)%4];
+  if(S.sOff===undefined)S.sOff=S.t;
+  if(S.lastSeas===undefined)S.lastSeas=seasInfo().i;
+  S.raid=Object.assign({st:0,t:rnd(420,600)},S.raid||{});RIVD.forEach(D=>{if(S[D.k].st===3)for(let x=Math.max(0,D.gx-8);x<=Math.min(W-1,D.gx+8);x++)revealed[x]=1;});
+  S.ach=S.ach||{};S.giftT=S.giftT||rnd(200,320);
+  S.ver=4;}
 function questsVisible(){return QUESTS.filter(q=>!S.qd[q.id]).slice(0,5);}
 function qReady(q){return q.g()>=q.N;}
 function rewTxt(r){const p=[];if(r.f)p.push('+'+r.f+' 🍖');if(r.u)p.push('nemokamai: '+UPG[r.u].n);return p.join(', ');}
@@ -428,17 +552,19 @@ function questPanel(){
   sheet('<h3>📜 Užduotys</h3><p>Įvykdyta '+done+' iš '+QUESTS.length+'.</p><div class="ql">'+(rows||'<p>Visos užduotys įvykdytos! 🎉</p>')+'</div><div class="opts"><button class="plain" data-a="x">Uždaryti</button></div>',
     a=>{if(a&&a.startsWith('q:')){claimQuest(a.slice(2));questPanel();}});}
 function upPanel(){
+  const arow=ACH.map(A=>{const ok=hasA(A.id),v=Math.min(A.N,Math.floor(A.g()||0));
+    return '<div class="qi'+(ok?' ok':'')+'"><div class="tx">'+A.u+'<small>'+A.ud+'</small><small>🏅 '+A.n+': '+A.d+(ok?'':' ('+v+' / '+A.N+')')+'</small>'+(ok?'':'<div class="pb"><i style="width:'+(v/A.N*100)+'%"></i></div>')+'</div><b>'+(ok?'✓':'🔒')+'</b></div>';}).join('');
   const rows=Object.keys(UPG).map(k=>{const l=upL(k),mx=l>=UPMAX,c=upCost(k),ok=!mx&&S.food>=c;
     return '<div class="qi"><div class="tx">'+UPG[k].n+' <span class="lv">'+l+'/'+UPMAX+'</span><small>'+UPG[k].d+'</small></div>'+
       '<button data-a="u:'+k+'"'+(ok?'':' disabled')+'>'+(mx?'Maks.':c+' 🍖')+'</button></div>';}).join('');
-  sheet('<h3>⬆ Patobulinimai</h3><p>Pirk už maistą. Kiekvienas lygis brangesnis. Turi: '+Math.floor(S.food)+' 🍖</p><div class="ql">'+rows+'</div><div class="opts"><button class="plain" data-a="x">Uždaryti</button></div>',
+  sheet('<h3>⬆ Patobulinimai</h3><p>Pirk už maistą. Kiekvienas lygis brangesnis. Turi: '+Math.floor(S.food)+' 🍖</p><div class="ql">'+rows+'<h4>🏅 Atrakinami už pasiekimus</h4>'+arow+'</div><div class="opts"><button class="plain" data-a="x">Uždaryti</button></div>',
     a=>{if(a&&a.startsWith('u:')){const k=a.slice(2),c=upCost(k);if(upL(k)<UPMAX&&S.food>=c){S.food-=c;S.up[k]++;rebuildRooms();toast(UPG[k].n+' → '+S.up[k]+' lygis','good');save();}upPanel();}});}
 function updBadges(){const n=questsVisible().filter(qReady).length;const b=document.getElementById('qBadge');b.textContent=n;b.classList.toggle('hidden',!n);
   const cu=Object.keys(UPG).some(k=>upL(k)<UPMAX&&S.food>=upCost(k));document.getElementById('uBadge').classList.toggle('hidden',!cu);}
 
 // --- priešų kolonijos (violetinė + raudonosios) ---
-const RIVD=[{k:'rival',gx:75,col:'#6a2c8a',fl:'#7b3fa0',lvl:4,hp:200,n:'Priešų kolonija',str:1},
-            {k:'fire',gx:4,col:'#e2531c',fl:'#f39c12',lvl:7,hp:450,n:'Raudonųjų skruzdžių kolonija',str:1.8}];
+const RIVD=[{k:'rival',gx:75,z:Z0-170,col:'#6a2c8a',fl:'#7b3fa0',lvl:4,hp:200,n:'Priešų kolonija',str:1},
+            {k:'fire',gx:4,z:Z0+170,col:'#e2531c',fl:'#f39c12',lvl:7,hp:450,n:'Raudonųjų skruzdžių kolonija',str:1.8}];
 const RGX=75,RX=RGX*C+C/2;let rv=[];
 const rX=D=>D.gx*C+C/2;
 function rivalRaid(){return rv.some(r=>r.k==='r');}
@@ -448,55 +574,50 @@ function rivalOne(D,o,dt){const R=S[D.k],rain=S.weather.phase==='rain',X=rX(D),s
   if(R.st===0){if(S.level>=D.lvl){R.st=1;R.mhp=D.hp;R.hp=D.hp;R.raidT=180;for(let x=Math.max(0,D.gx-5);x<=Math.min(W-1,D.gx+5);x++)revealed[x]=1;
       toast(o?'🔥 Atsirado raudonųjų skruzdžių kolonija kairėje! Jos stipresnės.':'🐜 Šalia įsikūrė priešų kolonija! Ji vagia maistą ir kartais puola.','warn');
       if(!o)hintOnce('rivh','Bakstelėk priešų skruzdėlyną, kad pasiųstum kareives jį sugriauti.');}return;}
-  if(R.st===2){R.back-=dt;if(R.back<=0){R.st=1;R.gen++;R.mhp=Math.round(D.hp*Math.pow(1.5,R.gen));R.hp=R.mhp;R.raidT=200;R.atk=0;toast(D.n+' vėl įsikūrė – dar stipresnė!','warn');}return;}
+  if(R.st>=2)return;
   const mine=r=>r.o===o;
   const nf=Math.min(4,1+Math.floor((S.level-D.lvl)/2));R.fT-=dt;
-  if(!rain&&R.fT<=0&&rv.filter(r=>mine(r)&&r.k==='f').length<nf){R.fT=rnd(6,12);rv.push({o,k:'f',x:X,hp:8*st,st:'go',tid:0,ph:0,dir:-1,carry:0,wait:0});}
+  if(!rain&&!isWinter()&&R.fT<=0&&rv.filter(r=>mine(r)&&r.k==='f').length<nf){R.fT=rnd(6,12);rv.push({o,k:'f',x:X,z:D.z,hp:8*st,st:'go',tid:0,ph:0,dir:-1,carry:0,wait:0});}
   if(!rain&&!enemies.length){R.raidT-=dt*(isNight()?1.5:1);if(R.raidT<=0){R.raidT=rnd(220,360);const n=Math.min(7,2+R.gen+Math.floor(S.level/3));
-    R.raids=(R.raids||0)+1;for(let k=0;k<n;k++)rv.push({o,k:'r',x:X+k*8*Math.sign(X-40*C),hp:12*st,st:'go',ph:0,dir:-1,carry:0,wait:0});
+    R.raids=(R.raids||0)+1;for(let k=0;k<n;k++)rv.push({o,k:'r',x:X+k*8*Math.sign(X-40*C),z:D.z+(k%3-1)*10,hp:12*st,st:'go',ph:0,dir:-1,carry:0,wait:0});
     toast(o?'🔥 Raudonosios skruzdės puola! Kareivės – į kovą!':'⚠ Priešų skruzdės puola! Kareivės – į kovą!','warn');
     ants.forEach(a=>{if(a.t!=='s'&&(onSurface(a)||(a.job&&a.job.k==='food')))goHome(a);});alertSoldiers();}}
   const near=ants.filter(a=>a.t==='s'&&onSurface(a)&&Math.abs(a.x-X)<70);
-  if(near.length&&rv.filter(r=>mine(r)&&r.k==='d').length<3){R.dT=(R.dT||0)-dt;if(R.dT<=0){R.dT=4;rv.push({o,k:'d',x:X,hp:10*st,st:'go',ph:0,dir:-1,carry:0,wait:0});}}
-  for(const a of near)if(Math.abs(a.x-X)<22)R.hp-=3*solM()*dt;
+  if(near.length&&rv.filter(r=>mine(r)&&r.k==='d').length<3){R.dT=(R.dT||0)-dt;if(R.dT<=0){R.dT=4;rv.push({o,k:'d',x:X,z:D.z,hp:10*st,st:'go',ph:0,dir:-1,carry:0,wait:0});}}
+  for(const a of near)if(Math.hypot(a.x-X,a.z-D.z)<34)R.hp-=3*solM()*dt;
   const ex=40*C+C/2;
-  for(let i=rv.length-1;i>=0;i--){const r=rv[i];if(!mine(r))continue;r.ph+=dt*10;let tx=r.x,sp=40;
+  for(let i=rv.length-1;i>=0;i--){const r=rv[i];if(!mine(r))continue;r.ph+=dt*10;let tx=r.x,sp=40,tz=D.z;if(r.z===undefined)r.z=D.z;
     if(rain&&r.k!=='d')r.st='back';
     if(r.k==='f'){
       if(r.st==='go'){let it=items.find(x=>x.id===r.tid);
-        if(!it){it=null;let bd=36;for(const x of items){if(x.rv||x.mk||x.ass.length)continue;const d=Math.abs(x.x-D.gx);if(d<bd){bd=d;it=x;}}if(it){it.rv=1;r.tid=it.id;}else r.st='back';}
-        if(it){tx=it.x*C+C/2;if(Math.abs(tx-r.x)<2){r.wait+=dt;if(r.wait>2){items.splice(items.indexOf(it),1);r.carry=1;r.ct=it.t;r.st='back';}}}}
+        if(!it){it=null;let bd=36;for(const x of items){if(x.rv||x.mk||x.multi||x.ass.length)continue;const d=Math.abs(x.x-D.gx);if(d<bd){bd=d;it=x;}}if(it){it.rv=1;r.tid=it.id;}else r.st='back';}
+        if(it){tx=it.x*C+C/2;tz=it.z;if(Math.abs(tx-r.x)<2&&Math.abs(tz-r.z)<3){r.wait+=dt;if(r.wait>2){items.splice(items.indexOf(it),1);r.carry=1;r.ct=it.t;r.st='back';}}}}
       if(r.st==='back')tx=X;}
     else if(r.k==='r'){
-      if(r.st==='go'){tx=ex;if(Math.abs(r.x-ex)<4){const s=Math.min(S.food,8*st);S.food-=s;if(s>0){fx.push({x:ex,y:GY-14,txt:'−'+Math.round(s),l:1.5});toastT('stolen','Priešai pavogė maisto!','warn',6);}r.carry=1;r.ct='crumb';r.st='back';}}
+      if(r.st==='go'){tx=ex;tz=Z0;if(Math.abs(r.x-ex)<4&&Math.abs(r.z-Z0)<6){const s=Math.min(S.food,8*st);S.food-=s;if(s>0){fx.push({x:ex,y:GY-14,txt:'−'+Math.round(s),l:1.5});toastT('stolen','Priešai pavogė maisto!','warn',6);}r.carry=1;r.ct='crumb';r.st='back';}}
       else tx=X;sp=30;}
-    else{let t=null,td=1e9;for(const a of near){const d=Math.abs(a.x-r.x);if(d<td){td=d;t=a;}}tx=t?t.x:X;sp=32;}
-    if(r.k!=='f'){let t=null,td=10;for(const a of ants){if(!onSurface(a))continue;const d=Math.abs(a.x-r.x);if(d<td){td=d;t=a;}}
+    else{let t=null,td=1e9;for(const a of near){const d=Math.abs(a.x-r.x);if(d<td){td=d;t=a;}}tx=t?t.x:X;tz=t?t.z:D.z;sp=32;}
+    if(r.k!=='f'){let t=null,td=10;for(const a of ants){if(!onSurface(a))continue;const d=Math.hypot(a.x-r.x,a.z-r.z);if(d<td){td=d;t=a;}}
       if(t){tx=r.x;t.hp-=(t.t==='s'?3:5)*st*dt;if(t.hp<=0){killAnt(t,true);toast((o?'Raudonosios':'Priešų')+' skruzdės nukovė mūsiškę!','warn');}}}
-    for(const a of ants)if(a.t==='s'&&onSurface(a)&&Math.abs(a.x-r.x)<16)r.hp-=8*solM()*dt;
+    for(const a of ants)if(a.t==='s'&&onSurface(a)&&Math.hypot(a.x-r.x,a.z-r.z)<18)r.hp-=8*solM()*dt;
     if(r.hp<=0){rv.splice(i,1);if(r.k==='r'&&!rv.some(q=>q.k==='r'&&q.o===o))toast('⚔ Antpuolis atremtas!','good');continue;}
-    const dx=tx-r.x;if(Math.abs(dx)>1){r.x+=Math.sign(dx)*Math.min(Math.abs(dx),sp*dt);r.dir=Math.sign(dx);}
-    if(r.st==='back'&&Math.abs(r.x-X)<3){if(r.carry)R.hp=Math.min(R.mhp,R.hp+2);rv.splice(i,1);}}
-  if(R.hp<=0){R.st=2;R.back=900;R.atk=0;R.hp=0;rv=rv.filter(r=>!mine(r));S.stats.rivals++;const rw=Math.round((150+R.gen*100)*st);S.food+=rw;
-    fx.push({x:X,y:GY-30,txt:'+'+rw,l:2});toast('🏆 '+D.n+' sugriauta! +'+rw+' maisto.','good');ants.forEach(a=>{if(a.t==='s'&&onSurface(a)){a.path=[];a.wait=0;a.st='idle';}});save();}
+    const dx=tx-r.x,dz=tz-r.z,dd=Math.hypot(dx,dz);if(dd>1){const m=Math.min(dd,sp*dt);r.x+=dx/dd*m;r.z+=dz/dd*m;r.ang=Math.atan2(dz,dx);if(Math.abs(dx)>0.5)r.dir=Math.sign(dx);}
+    if(r.st==='back'&&Math.abs(r.x-X)<3&&Math.abs(r.z-D.z)<4){if(r.carry)R.hp=Math.min(R.mhp,R.hp+2);rv.splice(i,1);}}
+  if(R.hp<=0){R.st=3;R.atk=0;R.hp=0;rv=rv.filter(r=>!mine(r));S.stats.rivals++;S.stats.terr=(S.stats.terr||0)+1;S.stats.kills++;const rw=Math.round((150+R.gen*100)*st);S.food+=rw;
+    for(let x=Math.max(0,D.gx-9);x<=Math.min(W-1,D.gx+9);x++)revealed[x]=1;rebuildRooms();
+    fx.push({x:X,y:GY-30,sz:D.z-30,txt:'+'+rw,l:2});toast('🏆 '+D.n+' sugriauta! +'+rw+' maisto. Jos teritorija dabar tavo: +50 sandėlio talpos ir daugiau maisto aplink.','good');ants.forEach(a=>{if(a.t==='s'&&onSurface(a)){a.path=[];a.wait=0;a.st='idle';}});save();}
 }
+let rtz=Z0,lastTZ=Z0;
 function rivalTarget(a){let best=null,bd=1e9;
   RIVD.forEach((D,o)=>{const R=S[D.k];if(R.st!==1)return;
-    for(const r of rv){if(r.o!==o)continue;if(r.k==='f'&&(!revealed[Math.floor(r.x/C)]||Math.abs(r.x-a.x)>40*C))continue;const d=Math.abs(r.x-a.x);if(d<bd){bd=d;best=r.x;}}
-    if(R.atk){const d=Math.abs(rX(D)-a.x)+2000;if(d<bd){bd=d;best=rX(D);}}});
+    for(const r of rv){if(r.o!==o)continue;if(r.k==='f'&&(!revealed[Math.floor(r.x/C)]||Math.abs(r.x-a.x)>40*C))continue;const d=Math.abs(r.x-a.x);if(d<bd){bd=d;best=r.x;rtz=r.z;}}
+    if(R.atk){const d=Math.abs(rX(D)-a.x)+2000;if(d<bd){bd=d;best=rX(D);rtz=D.z;}}});
   return best;}
 function rivalMenu(o){o=o||0;const D=RIVD[o],R=S[D.k],ns=ants.filter(a=>a.t==='s').length;
-  sheet('<h3>'+(o?'🔥 ':'🐜 ')+D.n+'</h3><p>Ji renka maistą ir kartais puola tavo skruzdėlyną. Sugriauk ją kareivėmis – gausi '+Math.round((150+R.gen*100)*D.str)+' 🍖.</p><p><b>Gyvybės: '+Math.ceil(R.hp)+' / '+R.mhp+'</b> · Tavo kareivių: '+ns+'</p><div class="opts">'+
+  sheet('<h3>'+(o?'🔥 ':'🐜 ')+D.n+'</h3><p>Ji renka maistą ir kartais puola tavo skruzdėlyną. Sugriauk ją kareivėmis – jos teritorija taps tavo (+50 sandėlio talpos, daugiau maisto aplink) ir gausi '+Math.round((150+R.gen*100)*D.str)+' 🍖.</p><p><b>Gyvybės: '+Math.ceil(R.hp)+' / '+R.mhp+'</b> · Tavo kareivių: '+ns+'</p><div class="opts">'+
     (R.atk?'<button data-a="s">🛑 Sustabdyti puolimą</button>':'<button class="pri" data-a="a">⚔ Siųsti kareives pulti</button>')+'<button class="plain" data-a="x">Uždaryti</button></div>',
     a=>{if(a==='a'){if(!ns){toast('Neturi kareivių! Karalienė gali jų užauginti nuo 2 lygio.','warn');return;}R.atk=1;toast('⚔ Kareivės žygiuoja į priešų koloniją!','good');alertSoldiers();save();}
       if(a==='s'){R.atk=0;ants.forEach(x=>{if(x.t==='s'&&onSurface(x)){x.path=[];x.wait=0;x.st='idle';}});save();}});}
-function drawRival(g){RIVD.forEach((D,o)=>{const R=S[D.k];if(R.st===0)return;const X=rX(D);
-  if(R.st===1){g.fillStyle=o?'#9a5a32':'#8a5a3c';g.beginPath();g.ellipse(X,GY,44,26,0,Math.PI,0);g.fill();g.fillStyle=o?'#b06a3a':'#a06b47';g.beginPath();g.ellipse(X-8,GY-8,24,12,0,Math.PI,0);g.fill();
-    g.fillStyle='#3b2416';g.beginPath();g.ellipse(X,GY-2,7,5,0,Math.PI,0);g.fill();
-    const fx2=X+(o?-20:20);g.strokeStyle='#4a2f1c';g.lineWidth=1.5;g.beginPath();g.moveTo(fx2,GY-22);g.lineTo(fx2,GY-44);g.stroke();g.fillStyle=D.fl;g.beginPath();g.moveTo(fx2,GY-44);g.lineTo(fx2+14,GY-39);g.lineTo(fx2,GY-34);g.fill();
-    if(R.hp<R.mhp||R.atk){g.fillStyle='#c0392b';g.fillRect(X-22,GY-34,44,4);g.fillStyle='#2ecc71';g.fillRect(X-22,GY-34,44*R.hp/R.mhp,4);}}
-  else{g.fillStyle='#9b7a5c';g.beginPath();g.ellipse(X,GY,30,8,0,Math.PI,0);g.fill();}
-  for(const r of rv)if(r.o===o)drawAntSide(g,r.x,GY-3,r.dir>0?1:-1,0,'r',r.ph,r.carry?r.ct:null,D.col);});}
 
 // ===== Nauja logika: diena/naktis, alkis, darbai, atliekos, amarai, priešai =====
 const DAYC=340;
@@ -516,19 +637,20 @@ function entranceCols(){const o=[];for(let x=0;x<W;x++)if(dug[idx(x,1)])o.push(x
 function guardCells(){const bc=roomCells(5);if(bc.length)return bc;const en=entranceCols();
   const o=dugList.filter(c=>{const r=rowOf(c);if(r<2||r>5)return false;const x=gxOf(c);return en.some(e=>Math.abs(e-x)<=3);});return o.length?o:dugList;}
 function activePlants(){if(S.level<2)return [];const n=Math.min(S.pl.length,1+Math.floor(S.level/3));return S.pl.slice(0,n);}
-function threatX(a){let best=null,bd=1e9;const c=x=>{const d=Math.abs(x-a.x);if(d<bd){bd=d;best=x;}};
-  for(const e of enemies)c(e.x);
-  if(bird){const t=ants.find(b=>b.id===bird.tid);if(t)c(t.x);}
-  if(liz&&!liz.flee)c(liz.x);
-  if(wasp&&!wasp.gone)c(wasp.x);
-  for(const p of pits)c(p.x);
-  const r=rivalTarget(a);if(r!==null&&(best===null||Math.abs(r-a.x)<bd))best=r;
+function threatX(a){let best=null,bd=1e9,bz=Z0;const c=(x,z)=>{const d=Math.abs(x-a.x);if(d<bd){bd=d;best=x;bz=z;}};
+  for(const e of enemies)c(e.x,e.z);
+  if(bird){const t=ants.find(b=>b.id===bird.tid);if(t)c(t.x,t.z);}
+  if(liz&&!liz.flee)c(liz.x,liz.z);
+  if(wasp&&!wasp.gone)c(wasp.x,wasp.z);
+  for(const p of pits)c(p.x,p.z);
+  const r=rivalTarget(a);if(r!==null&&(best===null||Math.abs(r-a.x)<bd)){best=r;bz=rtz;}
+  lastTZ=bz;
   return best===null?null:Math.max(C,Math.min(WW-C,best));}
 function alertSoldiers(){ants.forEach(a=>{if(a.t==='s'&&a.st==='idle'){a.path=[];a.wait=0;}});}
 function dropAt(e){let sd=(e%2)?1:-1,x=e+sd*2;if(x<1||x>W-2||dug[idx(x,1)]){sd=-sd;x=e+sd*2;}return Math.max(1,Math.min(W-2,x));}
 function nearestEntrance(x){const en=entranceCols();let b=40,bd=1e9;for(const e of en){const d=Math.abs(e-x);if(d<bd){bd=d;b=e;}}return b;}
-function addWaste(x,y,k){S.wst.push({id:S.nextId++,x,y,k,h:0,cr:0,age:0});
-  if(!rooms.some(r=>r.type===6))hintOnce('wsth','Kolonijoje kaupiasi atliekos. Iškask urvą ir paskirk „Atliekų kamera“, kitaip skruzdės susirgs.');}
+function addWaste(x,y,k,z){S.wst.push({id:S.nextId++,x,y,k,h:0,cr:0,age:0,z:z===undefined?Z0:z});
+  hintOnce('wsth2','♻ Kolonijoje atsiranda atliekų – darbininkės jas išneša į šiukšlyną lauke.');}
 
 function jobDone(a){a.job=null;a.ld=null;a.st='idle';a.wait=0.2;}
 function jobArrive(a,dt){const j=a.job;if(!j){a.st='idle';return;}const here=cellAt(a.x,a.y);
@@ -545,17 +667,17 @@ function jobArrive(a,dt){const j=a.job;if(!j){a.st='idle';return;}const here=cel
     if(j.s===0){if(S.food<1){b.fj=0;jobDone(a);break;}S.food-=1;a.ld='crumb';j.s=1;const t=cellAt(b.x,b.y);a.path=bfs(here,c=>c===t,false)||[];break;}
     b.fed=1;b.fj=0;S.stats.lfed=(S.stats.lfed||0)+1;fx.push({x:b.x,y:b.y-6,txt:'+',l:0.8});jobDone(a);break;}
   case 'waste':{const w=S.wst.find(x=>x.id===j.id);if(!w){jobDone(a);break;}
-    if(j.s===0){w.cr=1;a.ld=w.k==='dead'?'dead':'waste';j.s=1;const cs=roomCells(6);if(!cs.length){w.cr=0;w.h=0;w.x=a.x;w.y=a.y;jobDone(a);break;}
-      const t=cs[(Math.random()*cs.length)|0];a.path=bfs(here,c=>c===t,false)||[];break;}
-    if(room[here]!==6){w.cr=0;w.h=0;w.x=a.x;w.y=a.y;jobDone(a);break;}
+    if(j.s===0){w.cr=1;a.ld=w.k==='dead'?'dead':'waste';j.s=1;const t=idx(TRX,0);a.path=bfs(here,c=>c===t,false)||[];
+      if(!a.path.length){w.cr=0;w.h=0;w.x=a.x;w.y=a.y;jobDone(a);}break;}
+    if(here!==idx(TRX,0)){w.cr=0;w.h=0;w.x=a.x;w.y=a.y;w.z=a.z;jobDone(a);break;}
     S.wst.splice(S.wst.indexOf(w),1);S.dump=(S.dump||0)+1;jobDone(a);break;}
   case 'milk':{const p=S.pl.find(q=>q.x===j.x);if(j.s===0){j.s=1;a.wait=2.5;}
     a.wait-=dt;a.phase+=dt*3;a.ang=-Math.PI/2;
-    if(a.wait<=0){if(p){p.j=0;if(p.h>=1){p.h-=1;a.carry=5;a.ct='honey';S.stats.honey=(S.stats.honey||0)+5;fx.push({x:a.x,y:GY-24,txt:'🍯',l:1});}}
+    if(a.wait<=0){if(p){p.j=0;if(p.h>=1){p.h-=1;a.carry=5;a.ct='honey';S.stats.honey=(S.stats.honey||0)+5;fx.push({x:a.x,y:GY-24,sz:a.z-10,txt:'🍯',l:1});}}
       if(a.carry){a.job={k:'carry',big:false};a.st='carry';a.path=pathStore(here)||[];}else jobDone(a);}break;}
   case 'dirt':{if(j.s===0){if(surfDanger()||isNight()&&S.level>=2&&(enemies.length||liz)){a.phase+=dt;break;}
-      j.e=gxOf(here);j.d=dropAt(j.e);const t=idx(j.d,0);a.path=bfs(here,c=>c===t,false)||[];j.s=1;break;}
-    S.mounds[j.d]=(S.mounds[j.d]||0)+1;S.stats.dirt=(S.stats.dirt||0)+1;
+      j.e=gxOf(here);j.d=TRX;const t=idx(j.d,0);a.path=bfs(here,c=>c===t,false)||[];j.s=1;break;}
+    if(here!==idx(TRX,0)){jobDone(a);break;}S.trashD=(S.trashD||0)+1;S.stats.dirt=(S.stats.dirt||0)+1;
     for(let k=0;k<5;k++)parts.push({x:a.x+6*a.fd,y:GY-6,vx:rnd(-25,25),vy:rnd(-40,-10),l:0.5,c:'#9b6b42'});jobDone(a);break;}
   default:jobDone(a);}
 }
@@ -570,76 +692,76 @@ function hungerStep(dt){
 function wasteStep(dt){
   if((S.scrap||0)>=1){S.scrap-=1;const cs=roomCells(2).length?roomCells(2):roomCells(1);if(cs.length){const c=cs[(Math.random()*cs.length)|0];addWaste(cxi(c)+rnd(-4,4),cyi(c)+rnd(0,4),'w');}}
   for(let i=S.wst.length-1;i>=0;i--){const w=S.wst[i];w.age=(w.age||0)+dt;if(w.y<GY&&w.age>150&&!w.h)S.wst.splice(i,1);}
-  const loose=S.wst.filter(w=>w.y>=GY&&!w.cr).length,was=S.sick;S.sick=loose>=6;
-  if(S.sick&&!was)toast('🤢 Kolonija serga dėl atliekų! Reikia „Atliekų kameros“.','warn');
+  const loose=S.wst.filter(w=>w.y>=GY&&!w.cr).length,was=S.sick;S.sick=loose>=(hasA('clean')?12:6);
+  if(S.sick&&!was)toast('🤢 Kolonija serga dėl atliekų! Darbininkės turi jas išnešti į šiukšlyną lauke.','warn');
   if(!S.sick&&was)toast('Kolonija pasveiko!','good');
 }
 let wasNight=false;
 function dayStep(){const n=isNight();if(n!==wasNight){wasNight=n;if(S.t>5)toast(n?'🌙 Naktis – paviršiuje pavojingiau, darbininkės dirba po žeme.':'☀ Išaušo – darbai paviršiuje tęsiasi.',n?'':'good');}}
-function plantStep(dt){for(const p of activePlants())p.h=Math.min(3,(p.h||0)+dt/25);
+function plantStep(dt){if(!isWinter())for(const p of activePlants())p.h=Math.min(3,(p.h||0)+dt/25);
   if(S.level>=2)hintOnce('aph','🌿 Ant augalų atsirado amarai – darbininkės juos „melžia“ ir neša saldų lipčių!');}
 function freeSpot(){for(let k=0;k<20;k++){const x=4+((Math.random()*(W-8))|0);if(!revealed[x])continue;
-    if(entranceCols().some(e=>Math.abs(e-x)<3)||S.pl.some(p=>Math.abs(p.x-x)<2)||nearRival(x,6))continue;return x;}return -1;}
+    if(entranceCols().some(e=>Math.abs(e-x)<3)||nearRival(x,6))continue;return x;}return -1;}
 function newEnemies(dt){const rain=S.weather.phase==='rain',nm=isNight()?2:1;
   // skruzdliūto duobė
-  if(S.level>=3&&!pits.length){S.pitT=(S.pitT||200)-dt*nm;if(S.pitT<=0){S.pitT=rnd(220,340);const x=freeSpot();
-    if(x>0){pits.push({x:x*C+C/2,hp:30,cd:3,ph:0});toast('🕳 Skruzdliūto duobė! Kareivės gali ją sunaikinti.','warn');alertSoldiers();}}}
+  if(S.level>=3&&!pits.length){S.pitT=(S.pitT||200)-dt*nm*BE('pit');if(S.pitT<=0){S.pitT=rnd(220,340);const x=freeSpot();
+    if(x>0){pits.push({x:x*C+C/2,z:rndZ(x),hp:30,cd:3,ph:0});toast('🕳 Skruzdliūto duobė! Kareivės gali ją sunaikinti.','warn');alertSoldiers();}}}
   for(let i=pits.length-1;i>=0;i--){const p=pits[i];p.cd-=dt;p.ph+=dt;
-    if(p.cd<=0)for(const a of ants){if(a.t==='s'||!onSurface(a)||a.st==='trap')continue;if(Math.abs(a.x-p.x)<6){abortJob(a);a.ld=null;a.carry=0;a.path=[];a.st='trap';a.trap={x:p.x,t:1.8};p.cd=25;toast('🕳 Skruzdė įkrito į skruzdliūto duobę!','warn');break;}}
-    for(const a of ants)if(a.t==='s'&&onSurface(a)&&Math.abs(a.x-p.x)<14)p.hp-=5*solM()*dt;
-    if(p.hp<=0){pits.splice(i,1);S.stats.pits=(S.stats.pits||0)+1;const gx=Math.floor(p.x/C);
-      items.push({id:S.nextId++,x:gx,t:'beetle',amt:20,need:2,mk:true,age:0,ass:[],arr:[]});
+    if(p.cd<=0)for(const a of ants){if(a.t==='s'||!onSurface(a)||a.st==='trap')continue;if(Math.hypot(a.x-p.x,a.z-p.z)<14){abortJob(a);a.ld=null;a.carry=0;a.path=[];a.st='trap';a.trap={x:p.x,z:p.z,t:1.8};p.cd=25;toast('🕳 Skruzdė įkrito į skruzdliūto duobę!','warn');break;}}
+    for(const a of ants)if(a.t==='s'&&onSurface(a)&&Math.hypot(a.x-p.x,a.z-p.z)<20)p.hp-=5*solM()*dt;
+    if(p.hp<=0){pits.splice(i,1);S.stats.pits=(S.stats.pits||0)+1;S.stats.kills++;const gx=Math.floor(p.x/C);
+      items.push({id:S.nextId++,x:gx,z:p.z,t:'beetle',amt:20,need:2,mk:true,age:0,ass:[],arr:[]});
       ants.forEach(a=>{if(a.st==='trap'&&Math.abs(a.trap.x-p.x)<2){a.st='idle';a.wait=0;a.y=GY-6;}});
       toast('⚔ Kareivės sunaikino skruzdliūto duobę! Liko maisto.','good');}}
   // driežas
-  if(S.level>=5&&!liz&&!rain&&!isNight()){S.lizT=(S.lizT||420)-dt;if(S.lizT<=0){S.lizT=rnd(420,660);const l=Math.random()<0.5;
-    liz={x:l?-30:WW+30,dir:l?1:-1,hp:80,ate:0,cd:0,flee:false,life:50,ph:0};toast('🦎 Driežas! Jis ryja skruzdes – kareivės, nuvykite jį!','warn');
+  if(S.level>=5&&!liz&&!rain&&!isNight()){S.lizT=(S.lizT||420)-dt*BE('liz');if(S.lizT<=0){S.lizT=rnd(420,660);const l=Math.random()<0.5;
+    liz={x:l?-30:WW+30,z:rnd(120,SZ-120),dir:l?1:-1,ang:l?0:Math.PI,hp:80,ate:0,cd:0,flee:false,life:50,ph:0};toast('🦎 Driežas! Jis ryja skruzdes – kareivės, nuvykite jį!','warn');
     ants.forEach(a=>{if(a.t!=='s'&&(onSurface(a)||(a.job&&a.job.k==='food')))goHome(a);});alertSoldiers();}}
   if(liz){const L=liz;L.ph+=dt*6;L.life-=dt;L.cd-=dt;if(L.life<=0||L.ate>=3)L.flee=true;
-    let tx;if(L.flee)tx=L.x<WW/2?-60:WW+60;else{let t=null,td=1e9;for(const a of ants){if(!onSurface(a))continue;const d=Math.abs(a.x-L.x);if(d<td){td=d;t=a;}}tx=t?t.x:40*C;}
-    const dx=tx-L.x;if(Math.abs(dx)>3){L.x+=Math.sign(dx)*(L.flee?70:28)*dt;L.dir=Math.sign(dx);}
-    if(!L.flee&&L.cd<=0)for(const a of ants){if(a.t==='s'||!onSurface(a))continue;if(Math.abs(a.x-(L.x+L.dir*18))<10){killAnt(a,false);L.ate++;L.cd=2;toast('🦎 Driežas prarijo skruzdę!','warn');break;}}
-    if(!L.flee){for(const a of ants)if(a.t==='s'&&onSurface(a)&&Math.abs(a.x-L.x)<26)L.hp-=8*solM()*dt;
-      if(L.hp<=0){L.flee=true;S.stats.liz=(S.stats.liz||0)+1;toast('⚔ Kareivės nuvijo driežą!','good');}}
+    let tx,tz=L.z;if(L.flee)tx=L.x<WW/2?-60:WW+60;else{let t=null,td=1e9;for(const a of ants){if(!onSurface(a))continue;const d=Math.hypot(a.x-L.x,a.z-L.z);if(d<td){td=d;t=a;}}tx=t?t.x:40*C;tz=t?t.z:Z0+60;}
+    const dx=tx-L.x,dz=tz-L.z,dd=Math.hypot(dx,dz);if(dd>3){const m=Math.min(dd,(L.flee?70:28)*dt);L.x+=dx/dd*m;L.z+=dz/dd*m;L.ang=Math.atan2(dz,dx);if(Math.abs(dx)>0.5)L.dir=Math.sign(dx);}
+    if(!L.flee&&L.cd<=0)for(const a of ants){if(a.t==='s'||!onSurface(a))continue;if(Math.hypot(a.x-(L.x+Math.cos(L.ang)*18),a.z-(L.z+Math.sin(L.ang)*18))<12){killAnt(a,false);L.ate++;L.cd=2;toast('🦎 Driežas prarijo skruzdę!','warn');break;}}
+    if(!L.flee){for(const a of ants)if(a.t==='s'&&onSurface(a)&&Math.hypot(a.x-L.x,a.z-L.z)<30)L.hp-=8*solM()*dt;
+      if(L.hp<=0){L.flee=true;S.stats.liz=(S.stats.liz||0)+1;S.stats.kills++;toast('⚔ Kareivės nuvijo driežą!','good');}}
     if(L.flee&&(L.x<-50||L.x>WW+50)){liz=null;ants.forEach(a=>{if(a.t==='s'&&onSurface(a)){a.path=[];a.wait=0;a.st='idle';}});}}
   // vapsva
-  if(S.level>=4&&!wasp&&!rain){S.waspT=(S.waspT||200)-dt*(isNight()?0.5:1);if(S.waspT<=0){S.waspT=rnd(180,300);
-    wasp={x:Math.random()<0.5?-20:WW+20,y:GY-150,tid:0,t:0,life:28,ph:0,gone:false};toast('🐝 Vapsva medžioja skruzdes, nešančias maistą!','warn');alertSoldiers();}}
+  if(S.level>=4&&!wasp&&!rain){S.waspT=(S.waspT||200)-dt*(isNight()?0.5:1)*BE('wasp');if(S.waspT<=0){S.waspT=rnd(180,300);
+    wasp={x:Math.random()<0.5?-20:WW+20,y:GY-150,z:rnd(100,SZ-100),tid:0,t:0,life:28,ph:0,gone:false};toast('🐝 Vapsva medžioja skruzdes, nešančias maistą!','warn');alertSoldiers();}}
   if(wasp){const V=wasp;V.ph+=dt*30;V.life-=dt;
     if(V.gone){V.y-=60*dt;V.x+=V.dir*50*dt;if(V.y<-80){wasp=null;}}
     else{let t=V.tid?ants.find(a=>a.id===V.tid):null;if(t&&!onSurface(t)){t=null;V.tid=0;V.t=0;}
       if(!t){const c=ants.filter(a=>a.t!=='s'&&onSurface(a)&&a.carry>0&&a.st!=='trap');if(c.length){t=c[(Math.random()*c.length)|0];V.tid=t.id;V.t=2.5;}}
-      if(t){V.dir=Math.sign(t.x-V.x)||1;V.x+=(t.x-V.x)*Math.min(1,dt*3);V.t-=dt;V.y=GY-12-Math.max(0,V.t)/2.5*120;
+      if(t){V.dir=Math.sign(t.x-V.x)||1;V.x+=(t.x-V.x)*Math.min(1,dt*3);V.z+=(t.z-V.z)*Math.min(1,dt*3);V.t-=dt;V.y=GY-12-Math.max(0,V.t)/2.5*120;
         if(V.t<=0){const guard=ants.some(a=>a.t==='s'&&onSurface(a)&&Math.abs(a.x-t.x)<3*C);
-          if(guard){toast('⚔ Kareivės atbaidė vapsvą!','good');S.stats.wasp=(S.stats.wasp||0)+1;}else{killAnt(t,false);V.prey=1;toast('🐝 Vapsva pagrobė skruzdę su maistu!','warn');}
+          if(guard){toast('⚔ Kareivės atbaidė vapsvą!','good');S.stats.wasp=(S.stats.wasp||0)+1;S.stats.kills++;}else{killAnt(t,false);V.prey=1;toast('🐝 Vapsva pagrobė skruzdę su maistu!','warn');}
           V.gone=true;V.dir=V.x<WW/2?-1:1;}}
-      else{V.x+=Math.sin(V.ph*0.03)*30*dt+(40*C-V.x)*0.2*dt;V.y=GY-140+Math.sin(V.ph*0.05)*10;}
+      else{V.x+=Math.sin(V.ph*0.03)*30*dt+(40*C-V.x)*0.2*dt;V.z+=(Z0-V.z)*0.2*dt;V.y=GY-140+Math.sin(V.ph*0.05)*10;}
       if(V.life<=0&&!V.gone){V.gone=true;V.dir=V.x<WW/2?-1:1;}}}
 }
-function trapStep(a,dt){const T=a.trap;a.x+=(T.x-a.x)*Math.min(1,dt*3);a.y=Math.min(GY-1,a.y+dt*3);a.phase+=dt*20;T.t-=dt;
+function trapStep(a,dt){const T=a.trap;a.x+=(T.x-a.x)*Math.min(1,dt*3);if(T.z!==undefined)a.z+=(T.z-a.z)*Math.min(1,dt*3);a.y=Math.min(GY-1,a.y+dt*3);a.phase+=dt*20;T.t-=dt;
   if(T.t<=0){if(pits.some(p=>Math.abs(p.x-T.x)<2)){killAnt(a,false);}else{a.st='idle';a.y=GY-6;}}}
 
 // --- nauja karalienė / kolonijos ---
 const COLS_KEY='skruzdelynas_cols',COL_PRE='skruzdelynas_col_';
 function colList(){try{return JSON.parse(localStorage.getItem(COLS_KEY))||[];}catch(e){return [];}}
-function colTouch(){const l=colList();let e=l.find(x=>x.cid===S.cid);if(!e){e={cid:S.cid};l.push(e);}e.n=S.cname;e.a=ants.length;e.lv=S.level;localStorage.setItem(COLS_KEY,JSON.stringify(l));}
+function colTouch(){const l=colList();let e=l.find(x=>x.cid===S.cid);if(!e){e={cid:S.cid};l.push(e);}e.n=S.cname;e.b=S.biome;e.a=ants.length;e.lv=S.level;localStorage.setItem(COLS_KEY,JSON.stringify(l));}
 const QN=40;
 function newQueenMenu(){const ok=ants.length>=QN&&!S.flown;
-  sheet('<h3>👑 Nauja karalienė</h3><p>'+(S.flown?'Ši kolonija jau išleido naują karalienę.':'Kai kolonijoje yra bent '+QN+' skruzdžių, jauna sparnuota karalienė gali išskristi ir įkurti naują koloniją kitame žemėlapyje. Dabar: '+ants.length+' / '+QN+'.')+
+  sheet('<h3>👑 Nauja karalienė</h3><p>'+(S.flown?'Ši kolonija jau išleido naują karalienę.':'Kai kolonijoje yra bent '+QN+' skruzdžių, jauna sparnuota karalienė gali išskristi ir įkurti naują koloniją kitame žemėlapyje: '+(()=>{const b=BIO[BIO_ORD[Math.max(S.cid,...colList().map(x=>x.cid))%4]];return b.ic+' '+b.n;})()+'. Kiekvienas žemėlapis turi savo maistą ir priešus. Dabar: '+ants.length+' / '+QN+'.')+
     '</p><p>Nauja kolonija gauna premiją: 100 🍖, 6 darbininkes ir visus tavo patobulinimus. Ši kolonija lieka išsaugota – galėsi grįžti per „Kolonijos“.</p><div class="opts">'+
     (ok?'<button class="pri" data-a="go">🪽 Išleisti karalienę</button>':'')+'<button class="plain" data-a="x">Uždaryti</button></div>',
     a=>{if(a==='go')startFlight();});}
 function startFlight(){if(ants.length<QN||S.flown||flyQ)return;const e=nearestEntrance(40);flyQ={x:e*C+C/2,y:GY-4,t:0};toast('🪽 Jauna karalienė išskrenda!','good');}
 function flightStep(dt){if(!flyQ)return;flyQ.t+=dt;flyQ.y-=55*dt;flyQ.x+=Math.sin(flyQ.t*3)*30*dt+25*dt;if(flyQ.t>=3){flyQ=null;foundColony();}}
 function foundColony(){S.flown=1;save();const cur=localStorage.getItem(SAVE_KEY);localStorage.setItem(COL_PRE+S.cid,cur);
-  const l=colList();const nid=Math.max(S.cid,...l.map(x=>x.cid))+1;const up=Object.assign({},S.up);
-  newGame();S.cid=nid;S.cname='Kolonija '+nid;S.up=up;S.food=100;S.tut=99;for(let k=0;k<2;k++)addAnt('w',cx(39+k),cy(9));rebuildRooms();
-  centerQueen();updateProdButtons();save();toast('👑 Įkurta nauja kolonija: '+S.cname+'! (premija: 100 🍖, patobulinimai)','good');}
+  const l=colList();const nid=Math.max(S.cid,...l.map(x=>x.cid))+1;const up=Object.assign({},S.up),ach=Object.assign({},S.ach);
+  newGame();S.cid=nid;S.cname='Kolonija '+nid;S.up=up;S.ach=ach;S.biome=BIO_ORD[(nid-1)%4];buildSurf();S.food=100;S.tut=99;for(let k=0;k<2;k++)addAnt('w',cx(39+k),cy(9));rebuildRooms();
+  centerQueen();updateProdButtons();save();toast('👑 Įkurta nauja kolonija: '+S.cname+' – '+bio().ic+' '+bio().n+'! (premija: 100 🍖, patobulinimai)','good');}
 function switchCol(cid){if(cid===S.cid)return;save();localStorage.setItem(COL_PRE+S.cid,localStorage.getItem(SAVE_KEY));
   const d=localStorage.getItem(COL_PRE+cid);if(!d){toast('Kolonija nerasta.','warn');return;}
-  localStorage.setItem(SAVE_KEY,d);offRep=null;pits=[];liz=null;wasp=null;flyQ=null;load();centerQueen();updateProdButtons();hud();toast('Perjungta: '+S.cname,'good');if(offRep){const r=offRep;offRep=null;showOffline(r);}}
+  localStorage.setItem(SAVE_KEY,d);offRep=null;pits=[];liz=null;wasp=null;flyQ=null;load();centerQueen();centerSurf();updateProdButtons();hud();toast('Perjungta: '+S.cname,'good');if(offRep){const r=offRep;offRep=null;showOffline(r);}}
 function colMenu(){const l=colList();
-  sheet('<h3>🗺 Kolonijos</h3><p>Dabar: <b>'+S.cname+'</b></p><div class="opts">'+l.filter(x=>x.cid!==S.cid).map(x=>'<button data-a="c'+x.cid+'">'+x.n+'<small>🐜 '+(x.a||0)+' · ⭐ '+(x.lv||1)+'</small></button>').join('')+
+  sheet('<h3>🗺 Kolonijos</h3><p>Dabar: <b>'+S.cname+'</b> ('+bio().ic+' '+bio().n+')</p><div class="opts">'+l.filter(x=>x.cid!==S.cid).map(x=>'<button data-a="c'+x.cid+'">'+x.n+'<small>'+(BIO[x.b]?BIO[x.b].ic+' '+BIO[x.b].n+' · ':'')+'🐜 '+(x.a||0)+' · ⭐ '+(x.lv||1)+'</small></button>').join('')+
     '<button class="plain" data-a="x">Uždaryti</button></div>',a=>{if(a&&a[0]==='c')switchCol(+a.slice(1));});}
 
 // --- piešimas ---
@@ -666,37 +788,26 @@ function drawWinged(g,x,y,ph){g.save();g.translate(x,y);g.fillStyle='rgba(220,23
   g.beginPath();g.ellipse(-2,-6-f,9,3,-0.5,0,7);g.fill();g.beginPath();g.ellipse(2,-6+f,9,3,0.5,0,7);g.fill();g.restore();
   g.save();g.translate(x,y);g.rotate(-0.3);g.fillStyle='#7a3b12';g.beginPath();g.ellipse(-7,0,6.5,4.5,0,0,7);g.fill();g.beginPath();g.ellipse(0,0,3.2,2.4,0,0,7);g.fill();g.beginPath();g.ellipse(5,0,2.8,2.5,0,0,7);g.fill();
   g.fillStyle='#ffd23f';g.beginPath();g.moveTo(3,-2.5);g.lineTo(3,-6);g.lineTo(5,-4);g.lineTo(6.5,-7);g.lineTo(8,-4);g.lineTo(9,-6);g.lineTo(9,-2.5);g.closePath();g.fill();g.restore();}
-function drawWorld2(g,time,vx0,vx1){
-  // kauburiai iš žemių
-  for(const k in S.mounds){const n=S.mounds[k],X=(+k)*C+C/2;if(X<vx0-60||X>vx1+60)continue;const w=9+Math.min(34,Math.sqrt(n)*4.2),h=Math.min(26,3+Math.sqrt(n)*2.4);
-    g.fillStyle='#7d5232';g.beginPath();g.ellipse(X,GY-1,w,h,0,Math.PI,0);g.fill();g.fillStyle='#9b6b42';g.beginPath();g.ellipse(X-w*0.15,GY-2,w*0.75,h*0.8,0,Math.PI,0);g.fill();
-    g.fillStyle='#b58457';for(let i=0;i<Math.min(14,n);i++){const a=hash(+k,i,3)*Math.PI,r=hash(+k,i,5)*0.85;g.beginPath();g.arc(X+Math.cos(a)*w*r*0.9,GY-2-Math.sin(a)*h*r*0.85,1.3,0,7);g.fill();}}
-  // augalai su amarais
-  for(const p of activePlants()){if(!revealed[p.x])continue;const X=p.x*C+C/2;if(X<vx0-40||X>vx1+40)continue;const sw=Math.sin(time/900+p.x)*1.5;
-    g.strokeStyle='#3e8e2f';g.lineWidth=2.2;g.beginPath();g.moveTo(X,GY-3);g.quadraticCurveTo(X+4,GY-28,X+sw,GY-52);g.stroke();
-    g.fillStyle='#5cb84a';for(const [ly,sd] of [[-20,1],[-32,-1],[-44,1]]){g.beginPath();g.ellipse(X+sd*7+sw*0.5,GY+ly,7,3,sd*0.5,0,7);g.fill();}
-    g.fillStyle='#f06292';g.beginPath();g.arc(X+sw,GY-54,4,0,7);g.fill();
-    g.fillStyle='#9ccc65';for(let i=0;i<4;i++){g.beginPath();g.ellipse(X+2+(i%2?2:-1),GY-10-i*4,1.8,1.3,0.4,0,7);g.fill();}
-    g.fillStyle='#f5b301';for(let i=0;i<Math.floor(p.h||0);i++){g.beginPath();g.arc(X+6,GY-9-i*5,1.6,0,7);g.fill();}}
-  // duobės
-  for(const p of pits){if(p.x<vx0-30||p.x>vx1+30)continue;g.fillStyle='#d8b98a';g.beginPath();g.ellipse(p.x,GY-2,16,5,0,0,7);g.fill();
-    g.fillStyle='#8a6a45';g.beginPath();g.ellipse(p.x,GY-1.5,10,3.2,0,0,7);g.fill();g.fillStyle='#3a2616';g.beginPath();g.ellipse(p.x,GY-1,4,1.6,0,0,7);g.fill();
-    const m=Math.sin(p.ph*4)*1.5;g.strokeStyle='#3a2616';g.lineWidth=1.2;g.beginPath();g.moveTo(p.x-1,GY-1.5);g.lineTo(p.x-3,GY-4-m);g.moveTo(p.x+1,GY-1.5);g.lineTo(p.x+3,GY-4-m);g.stroke();
-    if(p.hp<30){g.fillStyle='#c0392b';g.fillRect(p.x-11,GY-14,22,3);g.fillStyle='#2ecc71';g.fillRect(p.x-11,GY-14,22*Math.max(0,p.hp/30),3);}}
-  // atliekos ir negyvos skruzdės
-  for(const w of S.wst){if(w.cr)continue;g.save();g.translate(w.x,w.y);drawFoodIcon(g,w.k==='dead'?'dead':'waste',0.6);g.restore();}
-}
-function drawLizard(g,L){g.save();g.translate(L.x,GY-5);g.scale(L.dir,1);const w=Math.sin(L.ph)*3;
-  g.strokeStyle='#3f7a33';g.lineWidth=2.5;g.lineCap='round';for(const [lx,o] of [[-8,0],[8,Math.PI]]){const s=Math.sin(L.ph+o)*4;g.beginPath();g.moveTo(lx,0);g.lineTo(lx+s,4);g.stroke();g.beginPath();g.moveTo(lx,0);g.lineTo(lx-s,4);g.stroke();}
-  g.fillStyle='#5aa04a';g.beginPath();g.moveTo(-14,-1);g.quadraticCurveTo(-34,w,-46,2+w);g.quadraticCurveTo(-30,3,-14,3);g.fill();
-  g.beginPath();g.ellipse(0,-1,16,5.5,0,0,7);g.fill();g.beginPath();g.ellipse(19,-2,7,4.5,0.1,0,7);g.fill();
-  g.fillStyle='#8fd16f';g.beginPath();g.ellipse(0,1,12,2.2,0,0,7);g.fill();g.fillStyle='#111';g.beginPath();g.arc(22,-4,1.3,0,7);g.fill();
-  g.fillStyle='#c0392b';g.fillRect(-16,-16,32,3);g.fillStyle='#2ecc71';g.fillRect(-16,-16,32*Math.max(0,L.hp/80),3);g.restore();}
-function drawWasp(g,V){g.save();g.translate(V.x,V.y);g.scale(V.dir||1,1);const f=Math.sin(V.ph)*4;
-  g.fillStyle='rgba(230,240,255,.8)';g.beginPath();g.ellipse(-1,-5-f,7,3,-0.4,0,7);g.fill();g.beginPath();g.ellipse(2,-5+f,6,2.6,0.3,0,7);g.fill();
-  g.fillStyle='#f1c40f';g.beginPath();g.ellipse(-6,1,6,3.8,0.3,0,7);g.fill();g.fillStyle='#222';g.fillRect(-8,-2,1.6,6);g.fillRect(-5,-2,1.6,6);
-  g.beginPath();g.moveTo(-12,3);g.lineTo(-15,5);g.lineTo(-11,1);g.fill();g.fillStyle='#222';g.beginPath();g.ellipse(1,0,3,2.2,0,0,7);g.fill();g.fillStyle='#f1c40f';g.beginPath();g.arc(5,-0.5,2.4,0,7);g.fill();
-  if(V.prey){drawAntSide(g,0,9,1,0,'w',0,null);}g.restore();}
+function hpBar(g,x,y,w,v){g.fillStyle='#c0392b';g.fillRect(x-w/2,y,w,3);g.fillStyle='#2ecc71';g.fillRect(x-w/2,y,w*Math.max(0,Math.min(1,v)),3);}
+function drawLizard(g,L){g.save();g.translate(L.x,L.z);g.rotate(L.ang||0);const w=Math.sin(L.ph)*4;
+  g.strokeStyle='#3f7a33';g.lineWidth=3;g.lineCap='round';for(const [lx,o] of [[-8,0],[8,Math.PI]])for(const sd of [-1,1]){const s2=Math.sin(L.ph+o)*4*sd;g.beginPath();g.moveTo(lx,0);g.lineTo(lx+s2,sd*9);g.lineTo(lx+s2+3,sd*11);g.stroke();}
+  g.fillStyle='#5aa04a';g.beginPath();g.moveTo(-14,-3);g.quadraticCurveTo(-32,w,-48,w*1.5);g.quadraticCurveTo(-30,w+2,-14,3);g.fill();
+  g.beginPath();g.ellipse(0,0,16,6,0,0,7);g.fill();g.beginPath();g.ellipse(19,0,7,5,0,0,7);g.fill();
+  g.fillStyle='#8fd16f';g.beginPath();g.ellipse(-2,0,10,2.4,0,0,7);g.fill();g.fillStyle='#111';g.beginPath();g.arc(21,-3,1.3,0,7);g.arc(21,3,1.3,0,7);g.fill();g.restore();
+  if(L.hp<80)hpBar(g,L.x,L.z-22,32,L.hp/80);}
+function drawWasp(g,V){const h=Math.max(6,(GY-(V.y||GY-20))*0.12);g.fillStyle='rgba(0,0,0,.18)';g.beginPath();g.ellipse(V.x,V.z,8,4,0,0,7);g.fill();
+  g.save();g.translate(V.x,V.z-h);g.scale(V.dir||1,1);const f=Math.sin(V.ph)*0.5;
+  g.fillStyle='rgba(230,240,255,.8)';g.beginPath();g.ellipse(-1,-5,7,3,-0.5-f,0,7);g.fill();g.beginPath();g.ellipse(-1,5,7,3,0.5+f,0,7);g.fill();
+  g.fillStyle='#f1c40f';g.beginPath();g.ellipse(-6,0,6.5,3.8,0,0,7);g.fill();g.fillStyle='#222';g.fillRect(-9,-3.5,1.6,7);g.fillRect(-6,-3.8,1.6,7.6);
+  g.beginPath();g.moveTo(-12,-1);g.lineTo(-16,0);g.lineTo(-12,1);g.fill();g.fillStyle='#222';g.beginPath();g.ellipse(1,0,3,2.2,0,0,7);g.fill();g.fillStyle='#f1c40f';g.beginPath();g.arc(5,0,2.4,0,7);g.fill();
+  if(V.prey)drawAnt(g,0,6,Math.PI/2,'w',0,false,null);g.restore();}
+function drawSpider(g,e){const sc=e.big?1.5:1;g.save();g.translate(e.x,e.z);g.rotate(e.ang||0);g.scale(sc,sc);
+  g.strokeStyle=e.big?'#1d1424':'#2b1f30';g.lineWidth=1.6;g.lineCap='round';
+  for(let i=0;i<4;i++)for(const sd of [-1,1]){const sw=Math.sin(e.ph+i*1.4+(sd>0?0:Math.PI))*2.5;const bx=3-i*2.6;g.beginPath();g.moveTo(bx,0);g.lineTo(bx+(1.5-i)*4+sw,sd*8);g.lineTo(bx+(1.5-i)*7+sw*1.4,sd*13);g.stroke();}
+  g.fillStyle=e.big?'#2a1d30':'#3a2a3f';g.beginPath();g.ellipse(-6,0,7.5,6,0,0,7);g.fill();g.beginPath();g.arc(4,0,4.3,0,7);g.fill();
+  if(e.big){g.fillStyle='#c0392b';g.beginPath();g.moveTo(-9,0);g.lineTo(-6,-2.5);g.lineTo(-3,0);g.lineTo(-6,2.5);g.closePath();g.fill();}
+  g.fillStyle='#d64545';g.beginPath();g.arc(7,-1.4,1.1,0,7);g.arc(7,1.4,1.1,0,7);g.fill();g.restore();
+  hpBar(g,e.x,e.z-16*sc,22*sc,e.hp/(e.mhp||40));}
 function drawNight(g,time,vx0,vx1,vy0){const k=nightK();if(k<=0||vy0>GY)return;const y0=Math.max(-60,vy0);
   g.fillStyle='rgba(12,20,58,'+k+')';g.fillRect(vx0,y0,vx1-vx0,GY+6-y0);
   if(k>0.25){g.fillStyle='rgba(255,255,240,'+(k*1.4)+')';for(let i=0;i<70;i++){const X=hash(i,1,7)*WW,Y=-40+hash(i,2,7)*(GY-120);if(X<vx0||X>vx1)continue;g.fillRect(X,Y,1.4,1.4);}
@@ -706,7 +817,7 @@ function drawNight(g,time,vx0,vx1,vy0){const k=nightK();if(k<=0||vy0>GY)return;c
 let offRep=null;
 function offline(sec){const r={sec,got:0,ate:0,born:0,laid:0};let t=sec;
   while(t>0){const h=Math.min(10,t);t-=h;
-    const wk=ants.filter(a=>a.t==='w').length;const g=Math.min(Math.min(wk*1.5,40)*spdM()*h/60,Math.max(0,caps.food-S.food));S.food+=g;r.got+=g;
+    const wk=isWinter()?0:ants.filter(a=>a.t==='w').length;const g=Math.min(Math.min(wk*1.5,40)*spdM()*h/60,Math.max(0,caps.food-S.food));S.food+=g;r.got+=g;
     let eat=1;for(const a of ants)eat+=ANT[a.t].eat;for(const b of brood)if(b.st===1)eat+=0.5;eat*=eatM();
     const e=Math.min(S.food,eat*h/60);S.food-=e;r.ate+=e;
     S.layT+=h;while(S.layT>=LAY_T){S.layT-=LAY_T;if(layEgg(true))r.laid++;}
@@ -724,13 +835,18 @@ function showOffline(r){sheet('<h3>🌙 Kol tavęs nebuvo</h3><p>Praėjo '+fmtDu
 
 // ===== Rendering =====
 const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
-let VW=0,VH=0,DPR=1;const cam={x:0,y:0,z:1};
+let VW=0,VH=0,DPR=1;const camU={x:0,y:0,z:1},camS={x:0,y:0,z:1};let cam=camU,view='u';
+function setView(v){if(v===view)return;if(v==='s'&&mode==='dig')setMode('play');view=v;cam=v==='s'?camS:camU;
+  const b=document.getElementById('btnView');b.innerHTML=v==='s'?'⛏<small>Po žeme</small>':'🌿<small>Lauke</small>';b.classList.toggle('on',v==='s');clampCam();}
+function centerSurf(){camS.z=Math.max(VW/WW,0.45,Math.min(3,VW/(22*C)));camS.x=40*C-VW/camS.z/2;camS.y=Z0-VH/camS.z*0.5;const c=cam;cam=camS;clampCam();cam=c;}
 function resize(){DPR=Math.min(2.5,window.devicePixelRatio||1);VW=window.innerWidth;VH=window.innerHeight;cv.width=VW*DPR;cv.height=VH*DPR;clampCam();}
 function minZ(){return Math.max(VW/WW,0.45);}
 function clampCam(){cam.z=Math.max(minZ(),Math.min(3,cam.z));const vw=VW/cam.z,vh=VH/cam.z;
-  cam.x=Math.max(0,Math.min(WW-vw,cam.x));cam.y=Math.max(-40,Math.min(WH+120/cam.z-vh,cam.y));}
-function drawAnt(g,x,y,ang,t,ph,carry,ct){
-  const s=t==='s'?1.25:t==='c'?0.95:1;const col=t==='s'?'#b2341f':t==='c'?'#2f6fd1':t==='r'?'#6a2c8a':'#2a1d17';
+  cam.x=Math.max(0,Math.min(WW-vw,cam.x));
+  if(cam===camS){const lo=-70/cam.z,hi=SZ+150/cam.z-vh;cam.y=hi<lo?(lo+hi)/2:Math.max(lo,Math.min(hi,cam.y));}
+  else cam.y=Math.max(GY-70,Math.min(WH+120/cam.z-vh,cam.y));}
+function drawAnt(g,x,y,ang,t,ph,carry,ct,col0){
+  const s=t==='s'?1.25:t==='c'?0.95:1;const col=col0||(t==='s'?'#b2341f':t==='c'?'#2f6fd1':t==='r'?'#6a2c8a':'#2a1d17');
   g.save();g.translate(x,y);g.rotate(ang);g.scale(s,s);
   g.strokeStyle=col;g.lineWidth=0.9;g.lineCap='round';
   for(let i=-1;i<=1;i++){const sw=Math.sin(ph+i*2.1)*1.6*(i===0?1:-1);
@@ -753,6 +869,16 @@ function drawFoodIcon(g,t,s){g.save();g.scale(s,s);
     g.fillStyle='#2e7d4f';g.beginPath();g.ellipse(0,0,8,5.5,0,0,7);g.fill();g.fillStyle='#1e3d2a';g.beginPath();g.arc(8,0,3,0,7);g.fill();g.strokeStyle='#1e3d2a';g.beginPath();g.moveTo(-8,0);g.lineTo(8,0);g.stroke();
     g.fillStyle='rgba(255,255,255,.35)';g.beginPath();g.ellipse(-2,-2.5,3,1.3,0,0,7);g.fill();}
   else if(t==='spider'){g.fillStyle='#3a2a3f';g.beginPath();g.ellipse(-2,0,6,5,0,0,7);g.fill();g.beginPath();g.arc(5,0,3.3,0,7);g.fill();}
+  else if(t==='cone'){g.fillStyle='#8a5a2b';g.beginPath();g.ellipse(0,0,6,4,0.2,0,7);g.fill();g.strokeStyle='#5e3b19';g.lineWidth=1;for(const k of [-3,0,3]){g.beginPath();g.moveTo(k,-3.5);g.lineTo(k+1.5,3.5);g.stroke();}}
+  else if(t==='mush'){g.fillStyle='#f3e6cf';g.fillRect(-1.5,0,3,5);g.fillStyle='#d9472b';g.beginPath();g.ellipse(0,0,6.5,4.5,0,Math.PI,0);g.fill();g.fillStyle='#fff';g.beginPath();g.arc(-2.5,-2,1,0,7);g.arc(2,-2.6,1,0,7);g.fill();}
+  else if(t==='fly'){g.fillStyle='rgba(220,235,255,.85)';g.beginPath();g.ellipse(-1,-3.5,4,2,-0.5,0,7);g.ellipse(-1,3.5,4,2,0.5,0,7);g.fill();g.fillStyle='#2c3e50';g.beginPath();g.ellipse(0,0,4.5,2.6,0,0,7);g.fill();g.fillStyle='#c0392b';g.beginPath();g.arc(4,-1,1,0,7);g.arc(4,1,1,0,7);g.fill();}
+  else if(t==='sugar'){g.fillStyle='#fdfdfd';g.strokeStyle='#d5d5d5';g.lineWidth=0.8;g.fillRect(-4,-4,8,8);g.strokeRect(-4,-4,8,8);g.fillStyle='#ececec';g.fillRect(-4,-4,8,2);}
+  else if(t==='apple'){g.fillStyle='#fff2c9';g.beginPath();g.moveTo(-5,3);g.lineTo(0,-5);g.lineTo(5,3);g.closePath();g.fill();g.fillStyle='#d63031';g.fillRect(-5,2,10,2);}
+  else if(t==='fruit'){g.fillStyle='rgba(0,0,0,.15)';g.beginPath();g.ellipse(2,3,13,7,0,0,7);g.fill();g.fillStyle='#e74c3c';g.beginPath();g.arc(0,0,12,0,7);g.fill();g.fillStyle='#fff3cd';g.beginPath();g.ellipse(4,2,5,4,0.4,0,7);g.fill();
+    g.fillStyle='rgba(255,255,255,.45)';g.beginPath();g.ellipse(-5,-5,3.5,2,0.6,0,7);g.fill();g.strokeStyle='#6b4a2b';g.lineWidth=1.6;g.beginPath();g.moveTo(0,-11);g.lineTo(2,-15);g.stroke();g.fillStyle='#4caf50';g.beginPath();g.ellipse(5,-14,4,2,0.4,0,7);g.fill();}
+  else if(t==='dbeetle'){g.strokeStyle='#1c2833';g.lineWidth=1.6;for(const k of [-6,0,6]){g.beginPath();g.moveTo(k,-7);g.lineTo(k-3,-12);g.moveTo(k,7);g.lineTo(k-3,12);g.stroke();}
+    g.fillStyle='#34495e';g.beginPath();g.ellipse(0,0,13,8.5,0,0,7);g.fill();g.fillStyle='#1c2833';g.beginPath();g.arc(13,0,4.5,0,7);g.fill();g.strokeStyle='#1c2833';g.beginPath();g.moveTo(-13,0);g.lineTo(10,0);g.stroke();
+    g.fillStyle='rgba(255,255,255,.3)';g.beginPath();g.ellipse(-4,-4,5,2,0,0,7);g.fill();}
   else if(t==='honey'){g.fillStyle='#f5b301';g.beginPath();g.moveTo(0,-6);g.quadraticCurveTo(5,1,0,5);g.quadraticCurveTo(-5,1,0,-6);g.fill();g.fillStyle='rgba(255,255,255,.6)';g.beginPath();g.arc(-1.5,1,1.2,0,7);g.fill();}
   else if(t==='dirt'){g.fillStyle='#8a5a34';g.beginPath();g.arc(0,0,4.5,0,7);g.fill();g.fillStyle='#a8774a';g.beginPath();g.arc(-1.4,-1.4,1.6,0,7);g.fill();}
   else if(t==='egg'){g.fillStyle='#fffaf0';g.strokeStyle='#d8c9b0';g.lineWidth=0.8;g.beginPath();g.ellipse(0,0,4,5.2,0.3,0,7);g.fill();g.stroke();}
@@ -768,43 +894,34 @@ function drawSpider(g,e){g.save();g.translate(e.x,e.y-2);g.scale(e.dir,1);
   g.fillStyle='#c0392b';g.fillRect(-11,-16,22,3);g.fillStyle='#2ecc71';g.fillRect(-11,-16,22*Math.max(0,e.hp/40),3);g.restore();}
 function roomIcon(g,t,x,y){
   g.save();g.translate(x,y);g.fillStyle='rgba(0,0,0,.18)';rr(g,-9,-8,18,18,4);g.fill();
-  g.fillStyle=t===1?'#f5b301':t===2?'#ff8c42':t===3?'#e86fa7':t===5?'#8e3b2e':t===6?'#7d8a4e':'#5aa9e6';rr(g,-9,-9,18,18,4);g.fill();
+  g.fillStyle=t===1?'#f5b301':t===2?'#ff8c42':t===3?'#e86fa7':t===5?'#8e3b2e':'#5aa9e6';rr(g,-9,-9,18,18,4);g.fill();
   g.fillStyle='#fff';g.strokeStyle='#fff';g.lineWidth=1.6;g.lineJoin='round';
   if(t===1){g.beginPath();g.moveTo(-6,4);g.lineTo(-6,-3);g.lineTo(-3,0);g.lineTo(0,-5);g.lineTo(3,0);g.lineTo(6,-3);g.lineTo(6,4);g.closePath();g.fill();}
   else if(t===2){g.beginPath();g.ellipse(-2.5,2,3,2,0.3,0,7);g.ellipse(2.5,2,3,2,-0.3,0,7);g.ellipse(0,-2.5,3,2,0,0,7);g.fill();}
   else if(t===3){g.beginPath();g.ellipse(0,0.5,4,5.5,0,0,7);g.fill();}
   else if(t===5){g.beginPath();g.moveTo(0,-6);g.lineTo(6,-4);g.lineTo(5,2);g.lineTo(0,6);g.lineTo(-5,2);g.lineTo(-6,-4);g.closePath();g.fill();g.fillStyle='#8e3b2e';g.fillRect(-0.8,-4,1.6,8);g.fillRect(-3.5,-1.5,7,1.6);}
-  else if(t===6){g.fillRect(-5,-3,10,8);g.fillRect(-6,-5,12,2);g.fillRect(-2,-7,4,2);g.fillStyle='#7d8a4e';g.fillRect(-2.6,-1,1.2,5);g.fillRect(1.4,-1,1.2,5);}
   else {g.font='bold 11px -apple-system,sans-serif';g.textAlign='center';g.textBaseline='middle';g.fillText('Zz',0,0.5);}
   g.restore();}
 function rr(g,x,y,w,h,r){g.beginPath();g.moveTo(x+r,y);g.arcTo(x+w,y,x+w,y+h,r);g.arcTo(x+w,y+h,x,y+h,r);g.arcTo(x,y+h,x,y,r);g.arcTo(x,y,x+w,y,r);g.closePath();}
 
 let clouds=[...Array(6)].map((_,i)=>({x:i*240+rnd(0,120),y:rnd(30,150),s:rnd(0.7,1.3)}));
-function render(time){
+function render(time){if(view==='s')renderSurf(time);else renderUnder(time);}
+function entrInfo(){const en=entranceCols(),out=ants.filter(onSurface).length;return {en,out};}
+function renderUnder(time){
   const g=ctx;g.setTransform(DPR,0,0,DPR,0,0);g.fillStyle='#3b2a20';g.fillRect(0,0,VW,VH);
   g.setTransform(DPR*cam.z,0,0,DPR*cam.z,-cam.x*cam.z*DPR,-cam.y*cam.z*DPR);
   const vx0=cam.x,vy0=cam.y,vx1=cam.x+VW/cam.z,vy1=cam.y+VH/cam.z;
-  const ph=S.weather.phase,dim=ph==='rain'?0.35:ph==='clouds'?0.15:0;
-  // sky
-  if(vy0<GY){const sg=g.createLinearGradient(0,-40,0,GY);sg.addColorStop(0,'#6cc0ee');sg.addColorStop(1,'#cdeefc');g.fillStyle=sg;g.fillRect(vx0,Math.max(-60,vy0),vx1-vx0,GY-Math.max(-60,vy0)+1);
-    if(nightK()<0.3){g.fillStyle='#ffe27a';g.beginPath();g.arc(WW*0.8,70,26,0,7);g.fill();}
-    // hills
-    g.fillStyle=S.cid%2?'#a8d98a':'#8fc7a0';g.beginPath();g.moveTo(0,GY);for(let x=0;x<=WW;x+=40)g.lineTo(x,GY-40-Math.sin(x*0.006)*25-Math.sin(x*0.017)*10);g.lineTo(WW,GY);g.fill();
-    for(const c of clouds){c.x+=0.08;if(c.x>WW+100)c.x=-150;g.fillStyle=dim?'rgba(150,160,175,.95)':'rgba(255,255,255,.95)';g.beginPath();
-      g.arc(c.x,c.y,22*c.s,0,7);g.arc(c.x+25*c.s,c.y-10*c.s,26*c.s,0,7);g.arc(c.x+52*c.s,c.y,20*c.s,0,7);g.rect(c.x,c.y,52*c.s,20*c.s);g.fill();}
-    if(dim){g.fillStyle='rgba(60,70,90,'+dim+')';g.fillRect(vx0,Math.max(-60,vy0),vx1-vx0,GY-Math.max(-60,vy0));}
-  }
-  // soil
+  if(vy0<GY){g.fillStyle='#2b1e16';g.fillRect(vx0,vy0,vx1-vx0,GY-vy0);}
   const sy0=Math.max(GY,vy0),sy1=Math.min(WH,vy1);
   if(sy1>sy0){const sx0=Math.max(0,vx0),sx1=Math.min(WW,vx1);
     g.drawImage(soil,sx0*OS,(sy0-GY)*OS,(sx1-sx0)*OS,(sy1-sy0)*OS,sx0,sy0,sx1-sx0,sy1-sy0);}
-  // grass with entrance gaps
   const gx0=Math.max(0,Math.floor(vx0/C)),gx1=Math.min(W-1,Math.ceil(vx1/C));
-  for(let x=gx0;x<=gx1;x++){const open=dug[idx(x,1)];
-    if(open){g.fillStyle='#9b6b42';g.beginPath();g.ellipse(x*C+C/2,GY,C*0.95,5,0,Math.PI,0);g.fill();continue;}
-    g.fillStyle='#6abf4b';g.fillRect(x*C,GY-5,C,8);g.fillStyle='#4fa63a';
-    for(let k=0;k<4;k++){const bx=x*C+k*4+hash(x,k,1)*2,bh=4+hash(x,k,2)*5;g.beginPath();g.moveTo(bx,GY-4);g.lineTo(bx+1.5,GY-4-bh);g.lineTo(bx+3,GY-4);g.fill();}}
-  drawWorld2(g,time,vx0,vx1);
+  g.fillStyle='#5f9e43';g.fillRect(Math.max(0,vx0),GY-3,Math.min(WW,vx1)-Math.max(0,vx0),3);
+  // įėjimų žymės
+  const EI=entrInfo(),main=nearestEntrance(40);
+  for(const x of EI.en){if(x<gx0-2||x>gx1+2)continue;const X=x*C+C/2;g.fillStyle='#2b1e16';g.fillRect(x*C,GY-3,C,4);
+    g.fillStyle='rgba(255,236,200,.9)';rr(g,X-(x===main?30:9),GY-26,x===main?60:18,16,7);g.fill();g.fillStyle='#4a2f1c';g.font='bold 9px -apple-system,sans-serif';g.textAlign='center';g.textBaseline='middle';
+    g.fillText(x===main?'↑ Lauke: '+EI.out+' 🐜':'↑',X,GY-17.5);g.textBaseline='alphabetic';}
   // queued cells
   for(let x=gx0;x<=gx1;x++)for(let r=Math.max(1,Math.floor((vy0-GY)/C)+1);r<=Math.min(ROWS-1,Math.floor((vy1-GY)/C)+1);r++){const i=idx(x,r);if(!queued[i])continue;
     const X=cxi(i),Y=cyi(i);g.fillStyle=layerOk(i)?'rgba(255,245,220,.45)':'rgba(220,60,60,.45)';g.beginPath();g.arc(X,Y,3.2,0,7);g.fill();
@@ -812,52 +929,97 @@ function render(time){
   // rooms: piles, tags
   for(const r of rooms){if(r.cx<vx0-60||r.cx>vx1+60||r.cy<vy0-60||r.cy>vy1+60)continue;
     if(r.type===2){const tot=roomCells(2).length||1,share=S.food*r.cells.length/tot,fl=r.floor||(r.floor=r.cells.slice().sort((p,q)=>cyi(q)-cyi(p)||cxi(p)-cxi(q)));
-      const n=Math.min(Math.ceil(fl.length*1.6),Math.ceil(share/5));
-      for(let k=0;k<n;k++){const c=fl[k%fl.length],lay=Math.floor(k/fl.length);const X=cxi(c)+(hash(c,k,4)-.5)*8,Y=cyi(c)+4-lay*4+(hash(c,k,6)-.5)*2;
+      const n=Math.min(fl.length,Math.ceil(share/5));
+      for(let k=0;k<n;k++){const c=fl[k];const X=cxi(c)+(hash(c,k,4)-.5)*6,Y=cyi(c)+(hash(c,k,6)-.5)*6;
         g.save();g.translate(X,Y);g.rotate(hash(c,k,8)*6);drawFoodIcon(g,['seed','crumb','berry','honey'][k%4],0.6);g.restore();}}
     if(r.type===1&&!rooms.some(q=>q.type===2)){const n=Math.min(10,Math.ceil(S.food/5));for(let k=0;k<n;k++){g.save();g.translate(r.cx+14+(k%5)*4,r.cy+5-Math.floor(k/5)*3);drawFoodIcon(g,['seed','crumb','berry'][k%3],0.55);g.restore();}}
-    if(r.type===6){const fl=r.floor||(r.floor=r.cells.slice().sort((p,q)=>cyi(q)-cyi(p)));const n=Math.min(fl.length*2,S.dump||0);
-      for(let k=0;k<n;k++){const c=fl[k%fl.length];g.save();g.translate(cxi(c)+(hash(c,k,4)-.5)*8,cyi(c)+4-Math.floor(k/fl.length)*3);drawFoodIcon(g,k%3?'waste':'dead',0.55);g.restore();}}
     if(r.type===4){for(let k=0;k<r.cells.length;k+=5){const c=r.cells[k];g.fillStyle='rgba(120,90,60,.15)';g.beginPath();g.ellipse(cxi(c),cyi(c)+3,7,3,0,0,7);g.fill();}}
   }
+  for(const w of S.wst){if(w.cr||w.y<GY)continue;g.save();g.translate(w.x,w.y);drawFoodIcon(g,w.k==='dead'?'dead':'waste',0.6);g.restore();}
   // brood
-  for(const b of brood){if(b.cr)continue;if(b.st===1&&b.fed<0.3){g.fillStyle='#e67e22';g.font='bold 7px -apple-system,sans-serif';g.textAlign='center';g.fillText('!',b.x,b.y-4);}
+  for(const b of brood){if(b.cr)continue;if(b.st===1&&b.fed<=0){g.fillStyle='#e67e22';g.font='bold 7px -apple-system,sans-serif';g.textAlign='center';g.fillText('!',b.x,b.y-4);}
     if(b.st===0){g.fillStyle='#fffaf0';g.strokeStyle='#d8c9b0';g.lineWidth=0.6;g.beginPath();g.ellipse(b.x,b.y,2.4,3.2,0.3,0,7);g.fill();g.stroke();}
     else{g.fillStyle='#fdf0dc';g.strokeStyle='#cbb08a';g.lineWidth=0.6;g.beginPath();g.ellipse(b.x,b.y,4.5,2.8,0,0,7);g.fill();g.stroke();
       g.strokeStyle='#e0cba8';for(let k=-2;k<=2;k+=2){g.beginPath();g.moveTo(b.x+k,b.y-2.5);g.lineTo(b.x+k,b.y+2.5);g.stroke();}}}
-  // queen
   drawQueen(g);if(S.qh>0.8){g.fillStyle='#fff';rr(g,queen.x-8,queen.y-24,16,12,4);g.fill();g.font='8px -apple-system,sans-serif';g.textAlign='center';g.fillText('🍖',queen.x,queen.y-15);}
   for(const r of rooms){if(r.cx<vx0-30||r.cx>vx1+30||r.cy<vy0-30||r.cy>vy1+30)continue;roomIcon(g,r.type,r.cx,r.top-2>GY?r.top+2:r.cy);}
-  // items
-  for(const it of items){if(!revealed[it.x])continue;const X=it.x*C+C/2,Y=GY-6;
-    if(it.mk){g.strokeStyle='#ffcf33';g.lineWidth=2;g.beginPath();g.arc(X,Y,12+Math.sin(time/200)*1.5,0,7);g.stroke();
-      if(it.need>1){g.fillStyle='#4a2f1c';g.font='bold 8px -apple-system,sans-serif';g.textAlign='center';g.fillText(it.arr.length+'/'+it.need+' 🐜',X,Y-15);}}
-    g.save();g.translate(X,Y);drawFoodIcon(g,it.t,it.t==='beetle'||it.t==='spider'?1:0.9);g.restore();}
-  // ants
-  for(const a of ants){if(a.x<vx0-12||a.x>vx1+12||a.y<vy0-12||a.y>vy1+12)continue;
-    const ld=a.ld||(a.carry?a.ct:null);
-    if(a.y<GY-0.5){let tl=Math.atan2(Math.sin(a.ang),Math.abs(Math.cos(a.ang)));tl=Math.max(-1.2,Math.min(1.2,tl));if(a.y<=GY-5.5&&!a.path.length)tl=0;
-      if(a.st==='trap')tl=0.5;drawAntSide(g,a.x,Math.min(GY-3,a.y+3),a.fd||1,tl,a.t,a.phase,ld);}
-    else drawAnt(g,a.x,a.y,a.ang,a.t,a.phase,!!ld,ld);
-    if(a.hp<maxHp(a)*0.99&&onSurface(a)){g.fillStyle='#c0392b';g.fillRect(a.x-5,a.y-9,10,1.6);g.fillStyle='#2ecc71';g.fillRect(a.x-5,a.y-9,10*a.hp/maxHp(a),1.6);}}
-  drawRival(g);
-  for(const e of enemies)drawSpider(g,e);if(liz)drawLizard(g,liz);if(wasp)drawWasp(g,wasp);if(flyQ)drawWinged(g,flyQ.x,flyQ.y,flyQ.t);
-  if(bird){const sh=1-bird.t/4;g.fillStyle='rgba(0,0,0,'+(0.15+sh*0.3)+')';g.beginPath();g.ellipse(bird.x,GY-3,10+sh*8,3,0,0,7);g.fill();
-    const by=GY-120+sh*100;g.save();g.translate(bird.x,by);g.fillStyle='#455a64';g.beginPath();g.ellipse(0,0,10,6,0,0,7);g.fill();
-    const fl=Math.sin(time/80)*8;g.beginPath();g.moveTo(-3,0);g.lineTo(-14,-8+fl);g.lineTo(2,-2);g.fill();g.beginPath();g.moveTo(3,0);g.lineTo(14,-8+fl);g.lineTo(-2,-2);g.fill();
-    g.fillStyle='#f39c12';g.beginPath();g.moveTo(9,-1);g.lineTo(15,1);g.lineTo(9,2);g.fill();g.restore();}
-  for(const p of parts){g.fillStyle=p.c;g.fillRect(p.x-1,p.y-1,2,2);}
-  drawNight(g,time,vx0,vx1,vy0);
-  // fog
-  if(vy0<GY){g.fillStyle='rgba(225,232,238,.93)';for(let x=gx0;x<=gx1;x++){if(revealed[x])continue;g.fillRect(x*C,-60,C+0.5,GY+4);}
-    g.fillStyle='rgba(255,255,255,.9)';for(let x=gx0;x<=gx1;x++){if(revealed[x])continue;if(x>0&&revealed[x-1]||x<W-1&&revealed[x+1]){for(let k=0;k<6;k++){g.beginPath();g.arc(x*C+C/2,GY-20-k*45,18,0,7);g.fill();}}}
-    if(gx0<=gx1){g.fillStyle='rgba(120,130,140,.8)';g.font='bold 10px -apple-system,sans-serif';g.textAlign='center';
-      for(let x=gx0;x<=gx1;x+=10)if(!revealed[x]&&!revealed[Math.min(W-1,x+3)])g.fillText('Neištyrinėta',x*C+C*2,GY-30);}}
-  if(ph==='rain'){g.strokeStyle='rgba(200,220,255,.7)';g.lineWidth=1;g.beginPath();
-    for(let k=0;k<160;k++){const X=vx0+((k*97+time*0.25*(1+k%3))%((vx1-vx0)+50)),Y=Math.max(-60,vy0)+((k*53+time*0.6)%(GY+60));if(Y<GY-4){g.moveTo(X,Y);g.lineTo(X-2,Y+8);}}g.stroke();}
-  for(const f of fx){g.fillStyle='rgba(46,139,87,'+Math.min(1,f.l)+')';g.font='bold 12px -apple-system,sans-serif';g.textAlign='center';g.fillText(f.txt,f.x,f.y);}
-  // world bottom
+  for(const a of ants){if(a.y<GY-0.5)continue;if(a.x<vx0-12||a.x>vx1+12||a.y<vy0-12||a.y>vy1+12)continue;
+    const ld=a.ld||(a.carry?a.ct:null);drawAnt(g,a.x,a.y,a.ang,a.t,a.phase,!!ld,ld);}
+  for(const p of parts){if(p.y<GY-8)continue;g.fillStyle=p.c;g.fillRect(p.x-1,p.y-1,2,2);}
+  for(const f of fx){if(f.z!==null&&f.z!==undefined)continue;g.fillStyle='rgba(46,139,87,'+Math.min(1,f.l)+')';g.font='bold 12px -apple-system,sans-serif';g.textAlign='center';g.fillText(f.txt,f.x,f.y);}
   if(vy1>WH){g.fillStyle='#2a1f1a';g.fillRect(vx0,WH,vx1-vx0,vy1-WH);}
+}
+function renderSurf(time){
+  const g=ctx,B=bio();g.setTransform(DPR,0,0,DPR,0,0);g.fillStyle=isWinter()?'#e9eff3':B.g2;g.fillRect(0,0,VW,VH);
+  g.setTransform(DPR*cam.z,0,0,DPR*cam.z,-cam.x*cam.z*DPR,-cam.y*cam.z*DPR);
+  const vx0=cam.x,vy0=cam.y,vx1=cam.x+VW/cam.z,vy1=cam.y+VH/cam.z;
+  if(!surfBg)buildSurf();g.drawImage(surfBg,0,0);
+  const win=isWinter();
+  if(win){g.fillStyle='rgba(244,249,255,.8)';g.fillRect(0,0,WW,SZ);g.fillStyle='#fff';for(let i=0;i<120;i++){const x=hash(i,1,61)*WW,y=hash(i,2,61)*SZ;g.beginPath();g.ellipse(x,y,14+hash(i,3,61)*22,6+hash(i,4,61)*8,0,0,7);g.fill();}}
+  // teritorijos
+  RIVD.forEach((D,o)=>{const R=S[D.k],X=rX(D);
+    if(R.st===3){g.fillStyle='rgba(46,139,87,.13)';g.beginPath();g.ellipse(X,D.z,150,120,0,0,7);g.fill();g.strokeStyle='rgba(46,139,87,.55)';g.lineWidth=2;g.setLineDash([8,6]);g.beginPath();g.ellipse(X,D.z,150,120,0,0,7);g.stroke();g.setLineDash([]);
+      g.fillStyle='#9b7a5c';g.beginPath();g.arc(X,D.z,22,0,7);g.fill();g.fillStyle='#7d5a3c';g.beginPath();g.arc(X,D.z,7,0,7);g.fill();
+      g.strokeStyle='#4a2f1c';g.lineWidth=1.8;g.beginPath();g.moveTo(X+14,D.z);g.lineTo(X+14,D.z-30);g.stroke();g.fillStyle='#2e8b57';g.beginPath();g.moveTo(X+14,D.z-30);g.lineTo(X+30,D.z-25);g.lineTo(X+14,D.z-20);g.fill();
+      g.fillStyle='rgba(30,70,40,.85)';g.font='bold 11px -apple-system,sans-serif';g.textAlign='center';g.fillText('Mūsų teritorija',X,D.z+38);}
+    else if(R.st===1){g.fillStyle='rgba(0,0,0,.15)';g.beginPath();g.ellipse(X+4,D.z+5,46,40,0,0,7);g.fill();
+      g.fillStyle=o?'#9a5a32':'#8a5a3c';g.beginPath();g.ellipse(X,D.z,44,38,0,0,7);g.fill();g.fillStyle=o?'#b06a3a':'#a06b47';g.beginPath();g.ellipse(X-6,D.z-6,28,22,0,0,7);g.fill();
+      g.fillStyle='#3b2416';g.beginPath();g.arc(X,D.z,8,0,7);g.fill();
+      const fx2=X+(o?-26:26);g.strokeStyle='#4a2f1c';g.lineWidth=1.8;g.beginPath();g.moveTo(fx2,D.z);g.lineTo(fx2,D.z-34);g.stroke();g.fillStyle=D.fl;g.beginPath();g.moveTo(fx2,D.z-34);g.lineTo(fx2+16,D.z-29);g.lineTo(fx2,D.z-24);g.fill();
+      if(R.hp<R.mhp||R.atk)hpBar(g,X,D.z-48,48,R.hp/R.mhp);}});
+  // šiukšlynas
+  {const n=(S.trashD||0)+(S.dump||0),X=TRX*C+C/2,r=12+Math.min(30,Math.sqrt(n)*2.4);g.fillStyle='rgba(0,0,0,.15)';g.beginPath();g.ellipse(X+3,TRZ+4,r,r*0.8,0,0,7);g.fill();
+    g.fillStyle='#7d6a4e';g.beginPath();g.ellipse(X,TRZ,r,r*0.8,0,0,7);g.fill();g.fillStyle='#968260';g.beginPath();g.ellipse(X-r*0.2,TRZ-r*0.15,r*0.6,r*0.45,0,0,7);g.fill();
+    for(let i=0;i<Math.min(16,n);i++){const a=hash(i,3,71)*6.283,d=hash(i,4,71)*r*0.75;g.save();g.translate(X+Math.cos(a)*d,TRZ+Math.sin(a)*d*0.8);drawFoodIcon(g,i%4?'waste':'dead',0.55);g.restore();}
+    g.fillStyle='rgba(60,45,30,.85)';g.font='bold 10px -apple-system,sans-serif';g.textAlign='center';g.fillText('♻ Šiukšlynas',X,TRZ+r+12);}
+  // seni kauburiai
+  for(const k in S.mounds){const n=S.mounds[k],X=(+k)*C+C/2,Z=entZ(nearestEntrance(+k))+20;if(X<vx0-60||X>vx1+60)continue;const r=6+Math.min(26,Math.sqrt(n)*3);
+    g.fillStyle='#8a5a34';g.beginPath();g.ellipse(X,Z,r,r*0.8,0,0,7);g.fill();g.fillStyle='#a8774a';g.beginPath();g.ellipse(X-r*0.2,Z-r*0.15,r*0.55,r*0.4,0,0,7);g.fill();}
+  // įėjimai
+  for(const x of entranceCols()){const X=x*C+C/2,Z=entZ(x);g.fillStyle='#9b6b42';g.beginPath();g.ellipse(X,Z,15,12,0,0,7);g.fill();g.fillStyle='#2a1a10';g.beginPath();g.ellipse(X,Z,7,5.5,0,0,7);g.fill();}
+  // augalai su amarais
+  for(const p of activePlants()){if(!revealed[p.x])continue;const X=p.x*C+C/2,Z=plZ(p);if(X<vx0-40||X>vx1+40)continue;
+    g.fillStyle=win?'#8d8a6a':'#4f9e3d';for(let i=0;i<6;i++){const a=i*1.047+Math.sin(time/1200+p.x)*0.05;g.beginPath();g.ellipse(X+Math.cos(a)*11,Z+Math.sin(a)*11,11,4.5,a,0,7);g.fill();}
+    g.fillStyle=win?'#a5a283':'#6cc256';g.beginPath();g.arc(X,Z,6,0,7);g.fill();if(!win){g.fillStyle='#f06292';g.beginPath();g.arc(X,Z,3.5,0,7);g.fill();}
+    if(!win){g.fillStyle='#9ccc65';for(let i=0;i<5;i++){g.beginPath();g.ellipse(X+Math.cos(i*1.3)*15,Z+Math.sin(i*1.3)*15,1.8,1.3,i,0,7);g.fill();}}
+    g.fillStyle='#f5b301';for(let i=0;i<Math.floor(p.h||0);i++){g.beginPath();g.arc(X+18,Z-4+i*5,1.8,0,7);g.fill();}}
+  // duobės
+  for(const p of pits){if(p.x<vx0-30||p.x>vx1+30)continue;g.fillStyle='#d8b98a';g.beginPath();g.arc(p.x,p.z,16,0,7);g.fill();
+    g.fillStyle='#8a6a45';g.beginPath();g.arc(p.x,p.z,10,0,7);g.fill();g.fillStyle='#3a2616';g.beginPath();g.arc(p.x,p.z,4,0,7);g.fill();
+    const m=Math.sin(p.ph*4)*1.5;g.strokeStyle='#3a2616';g.lineWidth=1.2;g.beginPath();g.moveTo(p.x-1,p.z);g.lineTo(p.x-3-m,p.z-4);g.moveTo(p.x+1,p.z);g.lineTo(p.x+3+m,p.z-4);g.stroke();
+    if(p.hp<30)hpBar(g,p.x,p.z-22,22,p.hp/30);}
+  // maistas
+  for(const it of items){if(!revealed[it.x])continue;const X=it.x*C+C/2,Z=it.z;if(X<vx0-30||X>vx1+30)continue;
+    if(it.mk){g.strokeStyle='#ffcf33';g.lineWidth=2;g.beginPath();g.arc(X,Z,(it.multi?20:12)+Math.sin(time/200)*1.5,0,7);g.stroke();
+      if(it.need>1){g.fillStyle='#4a2f1c';g.font='bold 8px -apple-system,sans-serif';g.textAlign='center';g.fillText(it.arr.length+'/'+it.need+' 🐜',X,Z-15);}}
+    g.save();g.translate(X,Z);drawFoodIcon(g,it.t,it.t==='beetle'||it.t==='spider'||it.multi?1:0.9);g.restore();
+    if(it.multi){g.fillStyle='#4a2f1c';g.font='bold 9px -apple-system,sans-serif';g.textAlign='center';g.fillText('🎁 '+Math.ceil(it.amt),X,Z-24);}}
+  for(const w of S.wst){if(w.cr||w.y>=GY)continue;g.save();g.translate(w.x,w.z);drawFoodIcon(g,w.k==='dead'?'dead':'waste',0.6);g.restore();}
+  // skruzdės
+  const sa=ants.filter(a=>a.y<GY-0.5).sort((p,q)=>p.z-q.z);
+  for(const a of sa){if(a.x<vx0-12||a.x>vx1+12||a.z<vy0-12||a.z>vy1+12)continue;const ld=a.ld||(a.carry?a.ct:null);
+    drawAnt(g,a.x,a.z,a.st==='trap'?a.ang+time/150:a.ang,a.t,a.phase,!!ld,ld);
+    if(a.hp<maxHp(a)*0.99){g.fillStyle='#c0392b';g.fillRect(a.x-5,a.z-9,10,1.6);g.fillStyle='#2ecc71';g.fillRect(a.x-5,a.z-9,10*a.hp/maxHp(a),1.6);}}
+  RIVD.forEach((D,o)=>{for(const r of rv)if(r.o===o)drawAnt(g,r.x,r.z===undefined?D.z:r.z,r.ang||0,'r',r.ph,!!r.carry,r.carry?r.ct:null,D.col);});
+  for(const e of enemies)drawSpider(g,e);if(liz)drawLizard(g,liz);if(wasp)drawWasp(g,wasp);
+  if(flyQ){g.save();g.translate(0,Z0-GY);drawWinged(g,flyQ.x,flyQ.y,flyQ.t);g.restore();}
+  if(bird){const sh=1-bird.t/4;g.fillStyle='rgba(0,0,0,'+(0.12+sh*0.3)+')';g.beginPath();g.ellipse(bird.x,bird.z,10+sh*10,6+sh*6,0,0,7);g.fill();
+    const bz=bird.z-(1-sh)*90-10;g.save();g.translate(bird.x,bz);g.fillStyle='#455a64';g.beginPath();g.ellipse(0,0,6,12,0,0,7);g.fill();
+    const fl=Math.sin(time/80)*4;g.beginPath();g.moveTo(-4,-2);g.lineTo(-22,-6+fl);g.lineTo(-18,4);g.lineTo(-4,4);g.fill();g.beginPath();g.moveTo(4,-2);g.lineTo(22,-6+fl);g.lineTo(18,4);g.lineTo(4,4);g.fill();
+    g.fillStyle='#f39c12';g.beginPath();g.moveTo(-2,-11);g.lineTo(0,-16);g.lineTo(2,-11);g.fill();g.restore();}
+  // naktis, debesys
+  const k=nightK(),ph=S.weather.phase,dim=ph==='rain'?0.3:ph==='clouds'?0.12:0;
+  if(dim){g.fillStyle='rgba(60,70,90,'+dim+')';g.fillRect(vx0,vy0,vx1-vx0,vy1-vy0);}
+  if(k>0){g.fillStyle='rgba(12,20,58,'+k+')';g.fillRect(vx0,vy0,vx1-vx0,vy1-vy0);}
+  // rūkas
+  const gx0=Math.max(0,Math.floor(vx0/C)),gx1=Math.min(W-1,Math.ceil(vx1/C));
+  g.fillStyle='rgba(225,232,238,.93)';for(let x=gx0;x<=gx1;x++){if(revealed[x])continue;g.fillRect(x*C,vy0-10,C+0.5,vy1-vy0+20);}
+  g.fillStyle='rgba(120,130,140,.8)';g.font='bold 11px -apple-system,sans-serif';g.textAlign='center';
+  for(let x=gx0;x<=gx1;x+=10)if(!revealed[x]&&!revealed[Math.min(W-1,x+3)])for(let z=80;z<SZ;z+=240)g.fillText('Neištyrinėta',x*C+C*2,z);
+  if(ph==='rain'){g.strokeStyle='rgba(200,220,255,.7)';g.lineWidth=1;g.beginPath();
+    for(let q=0;q<200;q++){const X=vx0+((q*97+time*0.25*(1+q%3))%((vx1-vx0)+50)),Y=vy0+((q*53+time*0.6)%((vy1-vy0)+20));g.moveTo(X,Y);g.lineTo(X-2,Y+8);}g.stroke();}
+  if(win){g.fillStyle='rgba(255,255,255,.9)';for(let q=0;q<90;q++){const X=vx0+((q*131+time*0.02*(1+q%3))%((vx1-vx0)+20)),Y=vy0+((q*71+time*0.05)%((vy1-vy0)+20));g.beginPath();g.arc(X,Y,1.4,0,7);g.fill();}}
+  for(const f of fx){if(f.z===null||f.z===undefined)continue;g.fillStyle='rgba(46,139,87,'+Math.min(1,f.l)+')';g.font='bold 12px -apple-system,sans-serif';g.textAlign='center';g.fillText(f.txt,f.x,f.z+(f.y-f.y0));}
 }
 function drawQueen(g){g.save();g.translate(queen.x,queen.y);const s=Math.sin(queen.phase*2)*0.4;
   g.fillStyle='#7a3b12';g.strokeStyle='#5a2a0c';g.lineWidth=1.2;g.lineCap='round';
@@ -904,14 +1066,17 @@ function tryQueue(gx,gy){if(gx<1||gx>W-2||gy<0||gy>H-2)return false;const i=idx(
   queued[i]=1;return true;}
 
 function tap(sx,sy){const wx=cam.x+sx/cam.z,wy=cam.y+sy/cam.z;
-  for(let o=0;o<RIVD.length;o++){const D=RIVD[o];if(S[D.k].st===1&&wy<GY+4&&wy>GY-50&&Math.abs(wx-rX(D))<50){rivalMenu(o);return;}}
-  if(wy<GY+4){let best=null,bd=22;for(const it of items){if(!revealed[it.x])continue;const d=Math.hypot(it.x*C+C/2-wx,GY-6-wy);if(d<bd){bd=d;best=it;}}
+  if(view==='s'){tapSurf(wx,wy);return;}
+  if(wy<GY){const e=nearestEntrance(Math.floor(wx/C));if(Math.abs(e*C+C/2-wx)<34&&wy>GY-34)setView('s');return;}
+  const c=cellAt(wx,wy);if(!dug[c])return;roomMenu(c);}
+function tapSurf(wx,wz){
+  for(let o=0;o<RIVD.length;o++){const D=RIVD[o];if(S[D.k].st===1&&Math.hypot(wx-rX(D),wz-D.z)<52){rivalMenu(o);return;}}
+  {let best=null,bd=26;for(const it of items){if(!revealed[it.x])continue;const d=Math.hypot(it.x*C+C/2-wx,it.z-wz);if(d<bd){bd=d;best=it;}}
     if(best){if(surfDanger()&&!best.mk)toastT('dng','Dabar pavojinga – skruzdės eis vėliau.','',4);best.mk=!best.mk;
       if(best.mk&&best.need>1)toastT('need'+best.t,FOODT[best.t].n+': reikia '+best.need+' darbininkių kartu.','',6);
       if(!best.mk){best.ass.slice().concat(best.arr).forEach(id=>{const a=ants.find(x=>x.id===id);if(a&&a.job&&a.job.id===best.id){goHome(a);}});best.ass=[];best.arr=[];}
       return;}
-    const gx=Math.floor(wx/C);if(gx>=0&&gx<W&&!revealed[gx]){toastT('fog','Čia dar neištyrinėta – reikia žvalgių (3 lygis).','',4);}return;}
-  const c=cellAt(wx,wy);if(!dug[c])return;roomMenu(c);}
+    const gx=Math.floor(wx/C);if(gx>=0&&gx<W&&!revealed[gx]){toastT('fog','Čia dar neištyrinėta – reikia žvalgių (3 lygis).','',4);}}}
 
 function isCore(i){const x=gxOf(i),r=rowOf(i);if(x<1||x>W-2||r<2||r>ROWS-2)return false;
   for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++)if(!dug[i+dy*W+dx])return false;return true;}
@@ -929,11 +1094,10 @@ function roomMenu(c){
     '<button data-a="2">📦 Sandėlis<small>+'+n*5+' maisto talpos</small></button>'+
     '<button data-a="3">🥚 Peryklė<small>+'+Math.floor(n/4)+' vietos kiaušiniams ir lervoms</small></button>'+
     '<button data-a="4">💤 Poilsis<small>+'+Math.floor(n/2)+' skruzdžių ribos, naktį skruzdės ilsisi čia</small></button>'+
-    '<button data-a="5">🛡 Kareivinės<small>kareivės laukia čia ir išbėga, kai paviršiuje pavojus</small></button>'+
-    '<button data-a="6">♻ Atliekų kamera<small>čia nešamos atliekos ir žuvusios skruzdės – kolonija neserga</small></button>'+
+    '<button data-a="5">🛡 Kareivinės<small>be jų negalima auginti kareivių; kareivės laukia čia ir išbėga, kai lauke pavojus</small></button>'+
     (tt?'<button data-a="0">✖ Nuimti paskirtį</button>':'')+'<button class="plain" data-a="x">Atšaukti</button></div>',
     a=>{if(a==='x')return;const v=+a;cells.forEach(k=>room[k]=v);rebuildRooms();const q=rooms.find(r=>r.type===1);if(q){queen.x=q.cx;queen.y=q.cy+2;}
-      if(v)toast(ROOMN[v]+' paskirtas!','good');save();});
+      if(v)toast(ROOMN[v]+' paskirtas!','good');updateProdButtons();save();});
 }
 function sheet(html,cb){const sh=document.getElementById('sheet'),card=document.getElementById('sheetCard');card.innerHTML=html;sh.classList.remove('hidden');const t0=performance.now();
   card.onclick=e=>{if(performance.now()-t0<400)return;const b=e.target.closest('button');if(!b)return;sh.classList.add('hidden');cb&&cb(b.dataset.a);};
@@ -944,28 +1108,34 @@ const TUT=[
  ['🐜 Sveiki!','Tavo karalienė ir 4 darbininkės gyvena mažame urve po žeme. Užaugink didžiausią koloniją!'],
  ['🍖 Maistas','Laisvos darbininkės pačios parneša matomą maistą. Bakstelėk maistą – jis bus parneštas pirmiausia. Uogą ir vabalą neša kelios kartu.'],
  ['⛏ Kasimas','Spausk „Kasti“ ir brėžk pirštu nuo esamo tunelio. „Tunelis“ – siauras takas, „Urvas“ – plati erdvė. Gilesni sluoksniai kietesni, bet juose yra retų radinių.'],
- ['🏠 Urvai','Iškask bent 4×4 erdvę, bakstelėk ją ir paskirk: Sandėlis (maistas), Peryklė (kiaušiniai ir lervos), Poilsis (daugiau skruzdžių), Kareivinės (kareivėms) ar Atliekų kamera (kad kolonija nesirgtų).'],
- ['👑 Karalienė','Apačioje pasirink, ką ji augins. Kiaušinis → lerva → skruzdė. Darbininkės neša kiaušinius į peryklę, maitina lervas ir karalienę, o alkanos skruzdės eina valgyti į sandėlį. Naktį paviršiuje pavojingiau. Vienu pirštu stumdyk vaizdą, dviem – artink.']];
+ ['🏠 Urvai','Iškask bent 4×4 erdvę, bakstelėk ją ir paskirk: Sandėlis (maistas), Peryklė (kiaušiniai ir lervos), Poilsis (daugiau skruzdžių), ar Kareivinės (be jų kareivių neužauginsi). Atliekas ir žemes darbininkės pačios išneša į šiukšlyną lauke.'],
+ ['👑 Karalienė','Apačioje pasirink, ką ji augins. Kiaušinis → lerva → skruzdė. Darbininkės neša kiaušinius į peryklę, maitina lervas ir karalienę, o alkanos skruzdės eina valgyti į sandėlį. Naktį paviršiuje pavojingiau. Vienu pirštu stumdyk vaizdą, dviem – artink. Mygtukas „🌿 Lauke“ parodo pievą iš viršaus, „⛏ Po žeme“ – tunelius.']];
 function showTut(i){if(i>=TUT.length){S.tut=99;save();return;}
   sheet('<div class="dots">'+TUT.map((_,k)=>k===i?'●':'○').join('')+'</div><h3>'+TUT[i][0]+'</h3><p>'+TUT[i][1]+'</p><div class="opts"><button class="pri" data-a="n">'+(i<TUT.length-1?'Toliau':'Pradėti!')+'</button></div>',()=>showTut(i+1));}
 
 // ===== UI =====
 const $=id=>document.getElementById(id);
 function updateProdButtons(){document.querySelectorAll('.prod').forEach(b=>{const t=b.dataset.t;b.classList.toggle('sel',S.prod===t);
-  const lk=t!=='p'&&ANT[t].lvl>S.level;b.classList.toggle('locked',lk);b.querySelector('small').textContent=lk?'🔒 '+ANT[t].lvl+' lyg.':t==='p'?'Pauzė':ANT[t].cost+' 🍖';});}
-document.querySelectorAll('.prod').forEach(b=>b.onclick=()=>{const t=b.dataset.t;if(t!=='p'&&ANT[t].lvl>S.level){toast(ANT[t].name+' atsirakins '+ANT[t].lvl+' lygyje.');return;}S.prod=t;updateProdButtons();save();});
-function setMode(m){mode=m;$('prodBar').classList.toggle('hidden',m==='dig');$('digBar').classList.toggle('hidden',m!=='dig');
+  const lk=t!=='p'&&ANT[t].lvl>S.level,nb=t==='s'&&!lk&&!hasBarr();b.classList.toggle('locked',lk||nb);const tx=lk?'🔒 '+ANT[t].lvl+' lyg.':nb?'🔒 Kareivinės':t==='p'?'Pauzė':ANT[t].cost+' 🍖';const sm=b.querySelector('small');if(sm.textContent!==tx)sm.textContent=tx;});}
+document.querySelectorAll('.prod').forEach(b=>b.onclick=()=>{const t=b.dataset.t;if(t!=='p'&&ANT[t].lvl>S.level){toast(ANT[t].name+' atsirakins '+ANT[t].lvl+' lygyje.');return;}
+  if(t==='s'&&!hasBarr()){toast('🛡 Kareivėms reikia kareivinių: iškask bent 4×4 urvą, bakstelėk jį ir paskirk „Kareivinės“.','warn');return;}S.prod=t;updateProdButtons();save();});
+function setMode(m){if(m==='dig')setView('u');mode=m;$('prodBar').classList.toggle('hidden',m==='dig');$('digBar').classList.toggle('hidden',m!=='dig');
   if(m==='dig')hintOnce('digh','Brėžk pirštu nuo tunelio. Dviem pirštais judink vaizdą.');}
 $('btnDig').onclick=()=>setMode('dig');$('btnDone').onclick=()=>{setMode('play');save();};
 document.querySelectorAll('.brush').forEach(b=>b.onclick=()=>{brush=+b.dataset.b;document.querySelectorAll('.brush').forEach(x=>x.classList.toggle('sel',x===b));});
-$('btnQuest').onclick=questPanel;$('btnUp').onclick=upPanel;
+$('btnQuest').onclick=questPanel;$('btnUp').onclick=upPanel;$('btnStats').onclick=statsPanel;$('btnView').onclick=()=>setView(view==='s'?'u':'s');
 $('btnClear').onclick=()=>{for(let i=0;i<queued.length;i++)if(queued[i]&&!digProg[i])queued[i]=0;ants.forEach(a=>{if(a.job&&a.job.k==='dig'&&!queued[a.job.c]){abortJob(a);a.st='idle';a.path=[];}});toast('Suplanuotas kasimas išvalytas.');save();};
 $('btnMenu').onclick=()=>sheet('<h3>Meniu</h3><p>Žaidimas išsaugomas automatiškai.</p><div class="opts"><button data-a="h">❓ Pagalba</button><button data-a="c">🎯 Rodyti karalienę</button><button data-a="q">👑 Nauja karalienė<small>'+(S.flown?'jau išskrido':ants.length+' / '+QN+' skruzdžių')+'</small></button>'+(colList().length>1?'<button data-a="k">🗺 Kolonijos<small>'+S.cname+'</small></button>':'')+'<button class="danger" data-a="r">Nauja kolonija</button><button class="plain" data-a="x">Uždaryti</button></div>',a=>{
   if(a==='h')showTut(0);if(a==='c')centerQueen();if(a==='q')newQueenMenu();if(a==='k')colMenu();
-  if(a==='r')sheet('<h3>Pradėti iš naujo?</h3><p>Visa dabartinė kolonija bus ištrinta.</p><div class="opts"><button class="danger" data-a="y">Taip, ištrinti</button><button class="plain" data-a="x">Ne</button></div>',b=>{if(b==='y'){localStorage.removeItem(SAVE_KEY);newGame();centerQueen();updateProdButtons();showTut(0);save();}});});
-function centerQueen(){cam.z=Math.max(minZ(),Math.min(3,VW/(24*C)));cam.x=queen.x-VW/cam.z/2;cam.y=queen.y-VH/cam.z*0.55;clampCam();}
+  if(a==='r')sheet('<h3>Pradėti iš naujo?</h3><p>Visa dabartinė kolonija bus ištrinta.</p><div class="opts"><button class="danger" data-a="y">Taip, ištrinti</button><button class="plain" data-a="x">Ne</button></div>',b=>{if(b==='y'){localStorage.removeItem(SAVE_KEY);newGame();centerQueen();centerSurf();updateProdButtons();showTut(0);save();}});});
+function centerQueen(){setView('u');cam.z=Math.max(minZ(),Math.min(3,VW/(24*C)));cam.x=queen.x-VW/cam.z/2;cam.y=queen.y-VH/cam.z*0.55;clampCam();}
 let hudT=0;
-function hud(){const f=Math.floor(S.food);$('vFood').textContent=f+'/'+caps.food;$('pFood').style.color=f<5?'#c0392b':'';
+function hud(){const si=seasInfo();$('seas').textContent=SEAS[si.i].ic+' '+SEAS[si.i].n+' · '+fmtT(si.left);
+  const R=S.raid,ra=enemies.filter(e=>e.raid).length,rb=$('raid');
+  if(R&&R.st===1){rb.textContent='⚠ Didelis vorų antpuolis po '+Math.ceil(R.t)+' s!';rb.classList.remove('hidden');}
+  else if(ra){rb.textContent='🕷 Antpuolis! Liko vorų: '+ra;rb.classList.remove('hidden');}else rb.classList.add('hidden');
+  document.body.classList.toggle('raidOn',!rb.classList.contains('hidden'));updateProdButtons();
+  const f=Math.floor(S.food);$('vFood').textContent=f+'/'+caps.food;$('pFood').style.color=f<5?'#c0392b':'';
   $('vAnts').textContent=ants.length+'/'+caps.pop;$('vLvl').textContent=S.level;
   const a=LVL_THR[S.level-1],b=LVL_THR[S.level];$('lvlBar').style.width=b?Math.min(100,(ants.length-a)/(b-a)*100)+'%':'100%';
   const eg=brood.filter(x=>x.st===0).length,lv=brood.length-eg;let q=0;for(let i=0;i<queued.length;i++)if(queued[i])q++;
@@ -977,8 +1147,8 @@ function pack(a){let s='';for(let i=0;i<a.length;i++)s+=String.fromCharCode(48+a
 function unpack(s,a){for(let i=0;i<a.length&&i<s.length;i++)a[i]=s.charCodeAt(i)-48;}
 function save(){try{const q=[];for(let i=0;i<queued.length;i++)if(queued[i])q.push(i);S.queue=q;
   const data={v:1,S,dug:pack(dug),room:pack(room),rev:pack(revealed),
-    ants:ants.map(a=>({id:a.id,t:a.t,x:Math.round(a.x),y:Math.round(a.y),hp:a.hp,carry:a.carry,ct:a.ct||null,hun:Math.round(a.hun*100)/100})),brood,
-    items:items.map(i=>({id:i.id,x:i.x,t:i.t,amt:i.amt,need:i.need,mk:i.mk,age:i.age})),saved:Date.now()};
+    ants:ants.map(a=>({id:a.id,t:a.t,x:Math.round(a.x),y:Math.round(a.y),z:Math.round(a.z||Z0),hp:a.hp,carry:a.carry,ct:a.ct||null,hun:Math.round(a.hun*100)/100})),brood,
+    items:items.map(i=>({id:i.id,x:i.x,z:Math.round(i.z),t:i.t,amt:i.amt,need:i.need,mk:i.mk,age:i.age,multi:i.multi?1:0})),saved:Date.now()};
   localStorage.setItem(SAVE_KEY,JSON.stringify(data));colTouch();}catch(e){console.warn(e);}}
 function load(){try{const raw=localStorage.getItem(SAVE_KEY);if(!raw)return false;const d=JSON.parse(raw);if(d.v!==1)return false;
   S=d.S;S.hints=S.hints||{};dug=new Uint8Array(W*ROWS);room=new Uint8Array(W*ROWS);queued=new Uint8Array(W*ROWS);digProg=new Float32Array(W*ROWS);revealed=new Uint8Array(W);
@@ -999,12 +1169,12 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden)save();else
 window.addEventListener('pagehide',save);window.addEventListener('resize',resize);
 // test hook
 window.__game={get S(){return S},get ants(){return ants},get items(){return items},get brood(){return brood},get caps(){return caps},get rooms(){return rooms},
-  step,save,load,dug:()=>dug,room:()=>room,queued:()=>queued,idx,tryQueue:(x,y)=>{gest=gest||{};return tryQueue(x,y);},roomMenu,cam,cellAt,completeDig,enemies:()=>enemies,setMode,rv:()=>rv,offline,questPanel,upPanel,rivalMenu,claimQuest,RX,isNight,nightK,get pits(){return pits},get liz(){return liz},get wasp(){return wasp},get flyQ(){return flyQ},
+  step,save,load,dug:()=>dug,room:()=>room,queued:()=>queued,idx,tryQueue:(x,y)=>{gest=gest||{};return tryQueue(x,y);},roomMenu,get cam(){return cam},get view(){return view},setView,statsPanel,seasInfo,hasBarr,updateProdButtons,BIO,cellAt,completeDig,enemies:()=>enemies,setMode,rv:()=>rv,offline,questPanel,upPanel,rivalMenu,claimQuest,RX,isNight,nightK,get pits(){return pits},get liz(){return liz},get wasp(){return wasp},get flyQ(){return flyQ},
   setPits:v=>pits=v,setLiz:v=>liz=v,setWasp:v=>wasp=v,newEnemies,rivalStep,startFlight,switchCol,colList,newQueenMenu,colMenu,roomCells,killAnt,assign,addWaste};
 
 resize();
 if(!load()){newGame();}
-centerQueen();updateProdButtons();hud();
+centerQueen();centerSurf();updateProdButtons();hud();
 if(S.tut!==99)showTut(0);else if(offRep)showOffline(offRep);
 requestAnimationFrame(frame);
 if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{});
